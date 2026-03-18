@@ -462,18 +462,21 @@ async function finish() {
   finishing.value = true
 
   try {
-    // Build preferences JSONB from comma-separated inputs
+    // Build preferences JSONB
     const preferences = {
-      foods_love: splitCsv(form.value.foods_love),
-      foods_avoid: splitCsv(form.value.foods_avoid),
+      foods_liked: splitCsv(form.value.foods_love),
+      foods_disliked: splitCsv(form.value.foods_avoid),
       dietary_restrictions: splitCsv(form.value.dietary_restrictions),
-      cooking_comfort: form.value.cooking_comfort,
+      cooking_level: form.value.cooking_comfort,
       meals_per_day: form.value.meals_per_day,
-      equipment: form.value.equipment,
-      injuries: form.value.injuries || null
+      fitness_experience: form.value.experience,
+      available_days: form.value.days_per_week,
+      equipment_access: form.value.equipment,
+      injuries: form.value.injuries || null,
+      weight_unit: 'lbs'
     }
 
-    // Upsert profile
+    // Upsert profile (only columns that exist in v2_profiles)
     const { error: profileError } = await supabase
       .from('v2_profiles')
       .upsert(
@@ -482,9 +485,7 @@ async function finish() {
           name: form.value.name.trim(),
           age: form.value.age || null,
           height_cm: form.value.height_cm || null,
-          weight_lbs: form.value.weight_lbs || null,
-          experience: form.value.experience,
-          days_per_week: form.value.days_per_week,
+          weight_kg: form.value.weight_lbs || null,
           difficulty: form.value.difficulty,
           preferences,
           onboarding_complete: true
@@ -509,48 +510,49 @@ async function finish() {
 
     // Save AI-generated fitness program if returned
     const programAction = aiActions.value.find(a => a.type === 'create_program')
-    if (programAction?.program) {
-      const prog = programAction.program
+    if (programAction?.data) {
+      const prog = programAction.data
 
       const { data: savedProgram, error: progError } = await supabase
         .from('v2_fitness_programs')
         .insert({
           user_id: auth.userId,
           name: prog.name || 'My Program',
-          description: prog.description || null,
-          weeks: prog.weeks || null,
-          days_per_week: form.value.days_per_week
+          source: 'ai',
+          is_active: true
         })
         .select('id')
         .single()
 
       if (progError) throw progError
 
-      // Save program days
       if (prog.days && savedProgram?.id) {
         for (const day of prog.days) {
           const { data: savedDay, error: dayError } = await supabase
             .from('v2_program_days')
             .insert({
               program_id: savedProgram.id,
-              day_number: day.day_number,
-              name: day.name || null,
-              focus: day.focus || null
+              user_id: auth.userId,
+              day_of_week: day.day_of_week,
+              name: day.name || 'Day',
+              focus: day.focus || null,
+              is_rest_day: day.is_rest_day || false
             })
             .select('id')
             .single()
 
           if (dayError) throw dayError
 
-          // Save exercises for this day
           if (day.exercises && savedDay?.id) {
             const exercises = day.exercises.map((ex, idx) => ({
               program_day_id: savedDay.id,
-              name: ex.name,
-              sets: ex.sets || null,
-              reps: ex.reps || null,
-              rest_seconds: ex.rest_seconds || null,
-              order_index: idx
+              user_id: auth.userId,
+              exercise_name: ex.name,
+              target_sets: ex.sets || 3,
+              target_reps_min: ex.reps_min || 8,
+              target_reps_max: ex.reps_max || 12,
+              rest_seconds: ex.rest || 90,
+              sort_order: idx
             }))
 
             const { error: exError } = await supabase

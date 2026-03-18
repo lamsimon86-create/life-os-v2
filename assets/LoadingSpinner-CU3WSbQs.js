@@ -1,0 +1,1 @@
+import{_ as r,o as n,c as s,a as t}from"./index-DtnZheVD.js";const o={},a={class:"flex items-center justify-center"};function c(d,e){return n(),s("div",a,[...e[0]||(e[0]=[t("div",{class:"w-8 h-8 rounded-full border-4 border-brand-500 border-t-transparent animate-spin"},null,-1)])])}const l=r(o,[["render",c]]);export{l as L};

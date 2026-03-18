@@ -45,6 +45,8 @@
           :exercise="exercise"
           :logged-sets="getSetsForExercise(exercise.exercise_name)"
           :previous-sets="getPreviousSetsForExercise(exercise.exercise_name)"
+          :user-weight="userStore.profile?.weight_kg || null"
+          :experience="userStore.preferences?.fitness_experience || 'beginner'"
           @log-set="handleLogSet($event, exercise)"
         />
       </div>
@@ -80,6 +82,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from 'lucide-vue-next'
 import { useFitnessStore } from '@/stores/fitness'
 import { useAuthStore } from '@/stores/auth'
+import { useUserStore } from '@/stores/user'
 import { useToast } from '@/composables/useToast'
 import { supabase } from '@/lib/supabase'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
@@ -90,6 +93,7 @@ const route = useRoute()
 const router = useRouter()
 const fitnessStore = useFitnessStore()
 const authStore = useAuthStore()
+const userStore = useUserStore()
 const toast = useToast()
 
 const loading = ref(true)

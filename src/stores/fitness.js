@@ -350,6 +350,38 @@ export const useFitnessStore = defineStore('fitness', () => {
     return data || []
   }
 
+  async function swapDays(dayIdA, dayIdB) {
+    if (!activeProgram.value?.days) return
+    const dayA = activeProgram.value.days.find(d => d.id === dayIdA)
+    const dayB = activeProgram.value.days.find(d => d.id === dayIdB)
+    if (!dayA || !dayB) return
+
+    const dowA = dayA.day_of_week
+    const dowB = dayB.day_of_week
+
+    // Update both in DB
+    const { error: errA } = await supabase
+      .from('v2_program_days')
+      .update({ day_of_week: dowB })
+      .eq('id', dayIdA)
+    if (errA) throw errA
+
+    const { error: errB } = await supabase
+      .from('v2_program_days')
+      .update({ day_of_week: dowA })
+      .eq('id', dayIdB)
+    if (errB) throw errB
+
+    // Update local state
+    dayA.day_of_week = dowB
+    dayB.day_of_week = dowA
+    activeProgram.value.days.sort((a, b) => a.day_of_week - b.day_of_week)
+
+    // Refresh today's workout
+    const todayDow = getDayOfWeek()
+    todaysWorkout.value = activeProgram.value.days.find(d => d.day_of_week === todayDow) || null
+  }
+
   async function deactivateProgram() {
     if (!activeProgram.value) return
     const { error } = await supabase
@@ -374,6 +406,7 @@ export const useFitnessStore = defineStore('fitness', () => {
     logSet,
     finishWorkout,
     createProgramFromTemplate,
+    swapDays,
     deactivateProgram,
     fetchSetsForLog,
     fetchLastSessionSets,

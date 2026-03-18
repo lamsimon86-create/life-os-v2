@@ -69,6 +69,19 @@ router.beforeEach(async (to) => {
   if (to.path === '/' && auth.isAuthenticated) {
     return { path: '/dashboard' }
   }
+
+  // Onboarding guard — hydrate profile and redirect if not complete
+  const isOnboardingOrLogin = to.path === '/onboarding' || to.path === '/'
+  if (auth.isAuthenticated && !isOnboardingOrLogin) {
+    const { useUserStore } = await import('@/stores/user')
+    const user = useUserStore()
+    if (!user.profile) {
+      await user.hydrate()
+    }
+    if (!user.onboardingComplete) {
+      return { path: '/onboarding' }
+    }
+  }
 })
 
 export default router

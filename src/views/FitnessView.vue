@@ -121,11 +121,32 @@
             <!-- Training day - ready to go -->
             <div v-else>
               <p class="text-sm text-slate-300 mb-1">{{ fitnessStore.todaysWorkout.name }}</p>
-              <p v-if="fitnessStore.todaysWorkout.focus" class="text-xs text-slate-500 mb-3">{{ fitnessStore.todaysWorkout.focus }}</p>
-              <div v-if="fitnessStore.todaysWorkout.exercises" class="text-xs text-slate-500 mb-3 space-y-0.5">
-                <p v-for="ex in fitnessStore.todaysWorkout.exercises" :key="ex.id">
-                  {{ ex.exercise_name }} &mdash; {{ ex.target_sets }}&times;{{ ex.target_reps_min }}{{ ex.target_reps_max && ex.target_reps_max !== ex.target_reps_min ? '-' + ex.target_reps_max : '' }}
-                </p>
+              <p v-if="fitnessStore.todaysWorkout.focus" class="text-xs text-slate-500">{{ fitnessStore.todaysWorkout.focus }}</p>
+              <p class="text-xs text-slate-500 mb-3">{{ fitnessStore.todaysWorkout.exercises?.length || 0 }} exercises</p>
+
+              <!-- Preview toggle -->
+              <button
+                @click="showPreview = !showPreview"
+                class="w-full text-xs text-brand-400 hover:text-brand-300 mb-3 transition"
+              >
+                {{ showPreview ? 'Hide Preview' : 'Preview Workout' }}
+              </button>
+
+              <!-- Exercise preview -->
+              <div v-if="showPreview && fitnessStore.todaysWorkout.exercises" class="mb-4 space-y-2">
+                <div
+                  v-for="(ex, i) in fitnessStore.todaysWorkout.exercises"
+                  :key="ex.id"
+                  class="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2"
+                >
+                  <div>
+                    <p class="text-sm text-slate-200">{{ i + 1 }}. {{ ex.exercise_name }}</p>
+                  </div>
+                  <div class="text-right text-xs text-slate-500">
+                    <p>{{ ex.target_sets }} &times; {{ ex.target_reps_min }}{{ ex.target_reps_max && ex.target_reps_max !== ex.target_reps_min ? '-' + ex.target_reps_max : '' }}</p>
+                    <p>{{ ex.rest_seconds }}s rest</p>
+                  </div>
+                </div>
               </div>
 
               <!-- Resume in-progress or start new -->
@@ -219,6 +240,7 @@ const toast = useToast()
 const activeTab = ref('dashboard')
 const creating = ref(false)
 const starting = ref(false)
+const showPreview = ref(false)
 
 const tabs = [
   { id: 'dashboard', label: 'Dashboard' },

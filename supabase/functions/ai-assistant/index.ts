@@ -161,15 +161,15 @@ Deno.serve(async (req: Request) => {
     const systemPrompt = buildSystemPrompt({ ...context, difficulty })
 
     // 4. Build messages array for Claude
-    const messages: { role: string; content: string }[] = []
+    const chatMessages: { role: string; content: string }[] = []
 
     if (conversationHistory && Array.isArray(conversationHistory)) {
       for (const msg of conversationHistory) {
-        messages.push({ role: msg.role, content: msg.content })
+        chatMessages.push({ role: msg.role, content: msg.content })
       }
     }
 
-    messages.push({ role: "user", content: message })
+    chatMessages.push({ role: "user", content: message })
 
     // 5. Call Claude
     const anthropic = new Anthropic({
@@ -180,7 +180,7 @@ Deno.serve(async (req: Request) => {
       model: "claude-sonnet-4-20250514",
       max_tokens: 2000,
       system: systemPrompt,
-      messages,
+      messages: chatMessages,
     })
 
     const assistantMessage = completion.content
@@ -212,7 +212,6 @@ Deno.serve(async (req: Request) => {
       .order("created_at", { ascending: false })
 
     if (allMessages && allMessages.length > 20) {
-      const idsToKeep = allMessages.slice(0, 20).map((m: { id: string }) => m.id)
       const idsToDelete = allMessages.slice(20).map((m: { id: string }) => m.id)
 
       if (idsToDelete.length > 0) {

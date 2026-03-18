@@ -84,4 +84,12 @@ router.beforeEach(async (to) => {
   }
 })
 
+router.afterEach((to) => {
+  // Lazy import to avoid circular deps
+  import('@/stores/ai').then(({ useAiStore }) => {
+    const ai = useAiStore()
+    ai.currentPage = to.name
+  })
+})
+
 export default router

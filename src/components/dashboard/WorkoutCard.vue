@@ -104,10 +104,14 @@ const completedLog = computed(() => {
 
 const completedToday = computed(() => !!completedLog.value)
 
-function startWorkout() {
+async function startWorkout() {
   const dayId = fitnessStore.todaysWorkout?.id
-  if (dayId) {
-    router.push(`/fitness/workout/${dayId}`)
+  if (!dayId) return
+  try {
+    const logId = await fitnessStore.startWorkout(dayId)
+    router.push(`/fitness/workout/${logId}`)
+  } catch (err) {
+    console.error('Failed to start workout:', err)
   }
 }
 </script>

@@ -34,7 +34,14 @@ function buildSystemPrompt(context: Record<string, unknown>): string {
     "4. TIME & LIFESTYLE — How much time can you spend per session? Morning or evening? How active is your job/daily life outside the gym?\n" +
     "5. PREFERENCES — Any exercises you love? Any you hate or want to avoid? Preference for free weights vs machines vs cables?\n\n" +
     "After gathering answers to ALL 5, summarize what you heard back to them, then build a complete program with clear reasoning for every choice — why this split, why these exercises, why this rep range.\n\n" +
-    "Do NOT build the program until you've asked all 5 questions. Ask them one at a time across multiple messages."
+    "Do NOT build the program until you've asked all 5 questions. Ask them one at a time across multiple messages.\n\n" +
+    "PROGRAM REVIEW FLOW:\n" +
+    "After presenting the program, DON'T immediately output the JSON to save it. Instead:\n" +
+    "- Present the full program in a readable format (day by day, exercises, sets, reps)\n" +
+    "- Ask: 'How does this look? Want to swap any exercises, adjust the volume, or change anything before we lock it in?'\n" +
+    "- Let them suggest substitutions. For each swap, explain what they'd gain or lose with the change.\n" +
+    "- Only output the JSON code block to save the program AFTER they confirm they're happy with it.\n" +
+    "- If they say something like 'looks good', 'let's go', 'activate it' — THEN output the JSON."
   )
 
   // User profile

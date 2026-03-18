@@ -27,27 +27,31 @@
     <!-- Tab bar -->
     <TabBar
       v-if="!hideChrome"
-      @open-ai="aiOpen = true"
+      @open-ai="aiStore.open()"
     />
 
     <!-- Toast -->
     <Toast />
 
+    <!-- AI Panel -->
+    <AiPanel />
+
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Settings } from 'lucide-vue-next'
 import TabBar from './TabBar.vue'
 import Toast from '@/components/shared/Toast.vue'
+import AiPanel from './AiPanel.vue'
+import { useAiStore } from '@/stores/ai'
 
 const route = useRoute()
 const router = useRouter()
 
-// Placeholder for Task 12 AI panel
-const aiOpen = ref(false)
+const aiStore = useAiStore()
 
 const HIDDEN_ROUTES = ['login', 'onboarding', 'workout']
 

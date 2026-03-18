@@ -53,9 +53,12 @@ export const useAiStore = defineStore('ai', () => {
       }
     }
 
-    // Fitness info
-    if (userStore.profile) {
-      context.fitnessExperience = userStore.profile.fitness_experience || null
+    // Fitness preferences
+    if (prefs) {
+      context.fitnessExperience = prefs.fitness_experience || null
+      context.availableDays = prefs.available_days || null
+      context.equipmentAccess = prefs.equipment_access || null
+      context.injuries = prefs.injuries || null
     }
     if (fitnessStore.todaysWorkout) {
       context.todaysWorkout = {
@@ -137,6 +140,11 @@ export const useAiStore = defineStore('ai', () => {
     }
   }
 
+  async function openWithMessage(text) {
+    isOpen.value = true
+    await sendMessage(text)
+  }
+
   return {
     isOpen,
     messages,
@@ -147,5 +155,6 @@ export const useAiStore = defineStore('ai', () => {
     clearHistory,
     buildContext,
     sendMessage,
+    openWithMessage,
   }
 })

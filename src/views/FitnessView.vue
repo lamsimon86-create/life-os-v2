@@ -26,31 +26,64 @@
       <!-- ===== DASHBOARD TAB ===== -->
       <template v-if="activeTab === 'dashboard'">
 
-        <!-- No program state -->
+        <!-- No program state — smart selection -->
         <template v-if="!fitnessStore.activeProgram">
-          <EmptyState
-            title="No active program"
-            description="Pick a template to get started, or ask the AI coach."
-          >
-            <div class="flex flex-col gap-2 mt-3 w-full max-w-xs">
+          <div class="space-y-5">
+            <!-- AI Program Builder (primary) -->
+            <div class="rounded-xl bg-brand-600/10 border border-brand-600/30 p-5">
+              <h3 class="text-lg font-bold text-white mb-1">Build My Program</h3>
+              <p class="text-sm text-slate-400 mb-4">AI builds a program tailored to your goals, experience, and schedule.</p>
               <button
-                v-for="tmpl in templates"
-                :key="tmpl.name"
-                class="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-left hover:border-brand-500 transition-colors"
-                :disabled="creating"
-                @click="selectTemplate(tmpl)"
+                class="w-full py-3 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-500 active:scale-[0.98] transition-all"
+                @click="aiStore.openWithMessage('Build me a workout program based on my profile')"
               >
-                <span class="block text-sm font-medium text-white">{{ tmpl.name }}</span>
-                <span class="block text-xs text-slate-500 mt-0.5">{{ tmpl.description }}</span>
-              </button>
-              <button
-                class="w-full px-4 py-3 rounded-lg bg-slate-800/50 border border-dashed border-slate-700 text-sm text-slate-500 cursor-not-allowed"
-                disabled
-              >
-                Ask AI Coach (coming soon)
+                Build My Program
               </button>
             </div>
-          </EmptyState>
+
+            <!-- Quick Start Templates (fallback) -->
+            <div v-if="filteredTemplates.length > 0">
+              <h4 class="text-sm font-medium text-slate-500 mb-3">Or pick a template</h4>
+              <div class="space-y-2">
+                <button
+                  v-for="tmpl in filteredTemplates"
+                  :key="tmpl.name"
+                  class="w-full rounded-xl bg-slate-900 border border-slate-800 p-4 text-left hover:border-brand-500/50 transition-colors"
+                  :disabled="creating"
+                  @click="selectTemplate(tmpl)"
+                >
+                  <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                      <div class="flex items-center gap-2">
+                        <span class="text-sm font-semibold text-white">{{ tmpl.name }}</span>
+                        <span
+                          v-if="tmpl.name === recommendedTemplate"
+                          class="px-1.5 py-0.5 text-[10px] font-medium bg-brand-600/20 text-brand-400 rounded"
+                        >
+                          Recommended
+                        </span>
+                      </div>
+                      <p class="text-xs text-slate-400 mt-1">{{ tmpl.rationale }}</p>
+                    </div>
+                  </div>
+                  <!-- Injury warnings -->
+                  <div
+                    v-if="getInjuryWarnings(tmpl).length > 0"
+                    class="mt-2 px-2 py-1.5 rounded bg-amber-600/10 border border-amber-600/20"
+                  >
+                    <p v-for="warning in getInjuryWarnings(tmpl)" :key="warning" class="text-[11px] text-amber-400">
+                      {{ warning }}
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <!-- 2-day users: no templates, nudge to AI -->
+            <p v-else class="text-sm text-slate-500 text-center">
+              With {{ userPrefs.available_days }} days/week, a custom AI program is your best bet.
+            </p>
+          </div>
         </template>
 
         <!-- Has program -->
@@ -161,14 +194,17 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Coffee, CheckCircle } from 'lucide-vue-next'
 import { useFitnessStore } from '@/stores/fitness'
+import { useAiStore } from '@/stores/ai'
+import { useUserStore } from '@/stores/user'
 import { useToast } from '@/composables/useToast'
 import { getWeekStart } from '@/lib/constants'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
-import EmptyState from '@/components/shared/EmptyState.vue'
 import ProgramCard from '@/components/fitness/ProgramCard.vue'
 import HistoryChart from '@/components/fitness/HistoryChart.vue'
 
 const fitnessStore = useFitnessStore()
+const aiStore = useAiStore()
+const userStore = useUserStore()
 const router = useRouter()
 const toast = useToast()
 
@@ -251,6 +287,67 @@ function resumeWorkout() {
 onMounted(() => {
   fitnessStore.hydrate()
 })
+
+// ==========================================
+// Smart program selection
+// ==========================================
+
+const userPrefs = computed(() => userStore.preferences || {})
+
+const INJURY_RULES = [
+  { keyword: 'knee', exercises: ['Squat', 'Lunges', 'Bulgarian Split Squat', 'Leg Press', 'Leg Extension'] },
+  { keyword: 'back', exercises: ['Deadlift', 'Barbell Row', 'Squat'] },
+  { keyword: 'spine', exercises: ['Deadlift', 'Barbell Row', 'Squat'] },
+  { keyword: 'shoulder', exercises: ['Overhead Press', 'Arnold Press', 'Bench Press', 'Incline Bench Press'] },
+  { keyword: 'wrist', exercises: ['Bench Press', 'Push-Ups', 'Barbell Curl'] },
+  { keyword: 'elbow', exercises: ['Skull Crushers', 'Tricep Pushdown', 'Barbell Curl'] },
+]
+
+const TEMPLATE_RATIONALES = {
+  'Push/Pull/Legs (6-day)': 'High volume, high frequency. Best for experienced lifters ready to push hard.',
+  'Upper/Lower (4-day)': 'Balanced split with good recovery. Great for intermediate lifters.',
+  'Full Body (3-day)': 'Hits every muscle each session. Ideal for beginners or limited schedules.',
+}
+
+const filteredTemplates = computed(() => {
+  const days = userPrefs.value.available_days
+  if (!days || days <= 2) return []
+  return templates.filter(t => {
+    const trainingDays = t.days.filter(d => !d.is_rest_day).length
+    if (days <= 3) return trainingDays <= 3
+    if (days <= 4) return trainingDays <= 4
+    if (days <= 6) return trainingDays >= 4
+    return true // 7 days: show all
+  }).map(t => ({ ...t, rationale: TEMPLATE_RATIONALES[t.name] || t.description }))
+})
+
+const recommendedTemplate = computed(() => {
+  const exp = userPrefs.value.fitness_experience
+  const days = userPrefs.value.available_days
+  if (!exp) return null
+  if (exp === 'beginner') return 'Full Body (3-day)'
+  if (days && days >= 5) return 'Push/Pull/Legs (6-day)'
+  return 'Upper/Lower (4-day)'
+})
+
+function getInjuryWarnings(tmpl) {
+  const injuries = userPrefs.value.injuries
+  if (!injuries || typeof injuries !== 'string' || !injuries.trim()) return []
+
+  const injuryLower = injuries.toLowerCase()
+  const warnings = []
+  const allExercises = tmpl.days.flatMap(d => (d.exercises || []).map(e => e.name))
+
+  for (const rule of INJURY_RULES) {
+    if (injuryLower.includes(rule.keyword)) {
+      const flagged = rule.exercises.filter(ex => allExercises.includes(ex))
+      if (flagged.length > 0) {
+        warnings.push(`Contains ${flagged.length} exercise${flagged.length > 1 ? 's' : ''} that may affect your ${rule.keyword} — review before starting`)
+      }
+    }
+  }
+  return warnings
+}
 
 // ==========================================
 // Program templates (hardcoded)

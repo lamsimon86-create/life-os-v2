@@ -66,21 +66,43 @@
           </div>
         </OnboardingStep>
 
-        <!-- Step 2: Your Goal -->
+        <!-- Step 2: Your Goal (SMART) -->
         <OnboardingStep
           v-if="currentStep === 2"
           :step="2"
           title="Your Goal"
-          subtitle="What are you working towards? Be specific — the more detail, the better."
+          subtitle="Set a SMART goal — Specific, Measurable, Achievable, Relevant, Time-bound."
         >
-          <div>
-            <label class="block text-sm text-slate-400 mb-1">Describe your goal</label>
-            <textarea
-              v-model="form.goal_text"
-              rows="4"
-              placeholder="e.g. Lose 15lbs by summer and feel more energetic at work"
-              class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 resize-none"
-            />
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm text-slate-400 mb-1">What do you want to achieve? <span class="text-brand-400">*</span></label>
+              <input
+                v-model="form.goal_specific"
+                type="text"
+                placeholder="e.g. Lose body fat and build visible abs"
+                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500"
+              />
+              <p class="text-[11px] text-slate-500 mt-1">Be specific — not "get fit" but exactly what you want</p>
+            </div>
+            <div>
+              <label class="block text-sm text-slate-400 mb-1">How will you measure it?</label>
+              <input
+                v-model="form.goal_measurable"
+                type="text"
+                placeholder="e.g. Drop from 185lbs to 170lbs, see abs in mirror"
+                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500"
+              />
+              <p class="text-[11px] text-slate-500 mt-1">A number, a milestone, or a clear indicator of success</p>
+            </div>
+            <div>
+              <label class="block text-sm text-slate-400 mb-1">By when?</label>
+              <input
+                v-model="form.goal_deadline"
+                type="date"
+                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-100"
+              />
+              <p class="text-[11px] text-slate-500 mt-1">A realistic deadline keeps you accountable</p>
+            </div>
           </div>
         </OnboardingStep>
 
@@ -327,7 +349,7 @@
         v-else
         type="button"
         class="px-6 py-3 bg-brand-600 rounded-lg text-white font-medium hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="currentStep === 1 && !form.name.trim()"
+        :disabled="(currentStep === 1 && !form.name.trim()) || (currentStep === 2 && !form.goal_specific.trim())"
         @click="next"
       >
         Next
@@ -362,6 +384,9 @@ const form = ref({
   height_cm: null,
   weight_lbs: null,
   goal_text: '',
+  goal_specific: '',
+  goal_measurable: '',
+  goal_deadline: '',
   experience: 'beginner',
   days_per_week: 4,
   equipment: 'Full Gym',
@@ -428,7 +453,7 @@ watch(currentStep, async (step) => {
             age: form.value.age,
             height_cm: form.value.height_cm,
             weight_lbs: form.value.weight_lbs,
-            goal: form.value.goal_text,
+            goal: form.value.goal_specific + (form.value.goal_measurable ? ' — Measure: ' + form.value.goal_measurable : '') + (form.value.goal_deadline ? ' — By: ' + form.value.goal_deadline : ''),
             experience: form.value.experience,
             days_per_week: form.value.days_per_week,
             equipment: form.value.equipment,
@@ -495,17 +520,37 @@ async function finish() {
 
     if (profileError) throw profileError
 
-    // Create goal if provided
-    if (form.value.goal_text.trim()) {
-      const { error: goalError } = await supabase
+    // Create SMART goal if provided
+    if (form.value.goal_specific.trim()) {
+      const smartTitle = form.value.goal_specific.trim()
+      const smartDescription = form.value.goal_measurable ? `Measure: ${form.value.goal_measurable.trim()}` : null
+
+      const { data: goalData, error: goalError } = await supabase
         .from('v2_goals')
         .insert({
           user_id: auth.userId,
-          title: form.value.goal_text.trim(),
+          title: smartTitle,
+          description: smartDescription,
+          target_date: form.value.goal_deadline || null,
           status: 'active'
         })
+        .select()
+        .single()
 
       if (goalError) throw goalError
+
+      // Auto-create a key result from the measurable field
+      if (form.value.goal_measurable.trim() && goalData) {
+        await supabase.from('v2_key_results').insert({
+          goal_id: goalData.id,
+          user_id: auth.userId,
+          title: form.value.goal_measurable.trim(),
+          current_value: 0,
+          target_value: 100,
+          unit: '%',
+          deadline: form.value.goal_deadline || null,
+        })
+      }
     }
 
     // Save AI-generated fitness program if returned

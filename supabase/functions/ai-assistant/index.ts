@@ -1,6 +1,6 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0"
-import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.39.0"
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import Anthropic from 'https://esm.sh/@anthropic-ai/sdk@0.39.0'
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -126,7 +126,7 @@ function extractActions(text: string): Record<string, unknown>[] {
   return actions
 }
 
-Deno.serve(async (req: Request) => {
+serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })

@@ -16,6 +16,9 @@
       </button>
     </header>
 
+    <!-- Offline banner -->
+    <OfflineBanner />
+
     <!-- Main content -->
     <main
       class="max-w-lg mx-auto"
@@ -46,6 +49,7 @@ import { Settings } from 'lucide-vue-next'
 import TabBar from './TabBar.vue'
 import Toast from '@/components/shared/Toast.vue'
 import AiPanel from './AiPanel.vue'
+import OfflineBanner from '@/components/shared/OfflineBanner.vue'
 import { useAiStore } from '@/stores/ai'
 
 const route = useRoute()

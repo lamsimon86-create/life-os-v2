@@ -5,9 +5,11 @@
 </template>
 
 <script setup>
-import { onMounted, watch } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppShell from '@/components/layout/AppShell.vue'
+import { syncPendingActions } from '@/lib/offlineQueue'
+import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 import { useFitnessStore } from '@/stores/fitness'
@@ -17,6 +19,8 @@ import { useAiStore } from '@/stores/ai'
 
 const route = useRoute()
 const auth = useAuthStore()
+
+const handleOnline = () => syncPendingActions(supabase)
 const user = useUserStore()
 const fitness = useFitnessStore()
 const meals = useMealsStore()
@@ -24,6 +28,8 @@ const goals = useGoalsStore()
 const ai = useAiStore()
 
 onMounted(async () => {
+  window.addEventListener('online', handleOnline)
+
   if (!auth.isAuthenticated) return
 
   // Hydrate user first — needed for onboarding check
@@ -37,6 +43,8 @@ onMounted(async () => {
     ])
   }
 })
+
+onUnmounted(() => window.removeEventListener('online', handleOnline))
 
 // Keep AI store in sync with current route
 watch(

@@ -91,6 +91,14 @@
           <!-- Active program -->
           <ProgramCard :program="fitnessStore.activeProgram" />
 
+          <!-- Change program -->
+          <button
+            class="w-full text-xs text-slate-500 hover:text-slate-300 transition py-1"
+            @click="changeProgram"
+          >
+            Change Program
+          </button>
+
           <!-- Today's workout card -->
           <div class="rounded-xl bg-slate-900 border border-slate-800 p-4">
             <h3 class="text-sm font-semibold text-white mb-2">Today's Workout</h3>
@@ -260,6 +268,16 @@ async function selectTemplate(tmpl) {
     toast.show('Failed to create program', 'error')
   } finally {
     creating.value = false
+  }
+}
+
+async function changeProgram() {
+  if (!confirm('Switch programs? Your workout history will be kept.')) return
+  try {
+    await fitnessStore.deactivateProgram()
+    toast.show('Program deactivated', 'info')
+  } catch (err) {
+    toast.show('Failed to change program', 'error')
   }
 }
 

@@ -350,6 +350,17 @@ export const useFitnessStore = defineStore('fitness', () => {
     return data || []
   }
 
+  async function deactivateProgram() {
+    if (!activeProgram.value) return
+    const { error } = await supabase
+      .from('v2_fitness_programs')
+      .update({ is_active: false })
+      .eq('id', activeProgram.value.id)
+    if (error) throw error
+    activeProgram.value = null
+    todaysWorkout.value = null
+  }
+
   return {
     activeProgram,
     todaysWorkout,
@@ -363,6 +374,7 @@ export const useFitnessStore = defineStore('fitness', () => {
     logSet,
     finishWorkout,
     createProgramFromTemplate,
+    deactivateProgram,
     fetchSetsForLog,
     fetchLastSessionSets,
     fetchExerciseHistory

@@ -31,9 +31,9 @@ export const useUserStore = defineStore('user', () => {
         .from('v2_profiles')
         .select('*')
         .eq('user_id', auth.userId)
-        .single()
+        .maybeSingle()
 
-      if (profileError && profileError.code !== 'PGRST116') throw profileError
+      if (profileError) throw profileError
       profile.value = profileData || null
 
       const today = new Date().toISOString().split('T')[0]
@@ -42,7 +42,7 @@ export const useUserStore = defineStore('user', () => {
         .select('*')
         .eq('user_id', auth.userId)
         .eq('date', today)
-        .single()
+        .maybeSingle()
 
       if (logData) {
         energy.value = logData.energy

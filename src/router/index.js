@@ -46,7 +46,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory('/life-os/'),
+  history: createWebHistory('/life-os-v2/'),
   routes
 })
 

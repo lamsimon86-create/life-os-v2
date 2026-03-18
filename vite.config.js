@@ -24,7 +24,7 @@ function copy404Plugin() {
 }
 
 export default defineConfig({
-  base: '/life-os/',
+  base: '/life-os-v2/',
 
   plugins: [
     vue(),
@@ -38,10 +38,10 @@ export default defineConfig({
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',
-        start_url: '/life-os/',
+        start_url: '/life-os-v2/',
         icons: [
           {
-            src: '/life-os/favicon.svg',
+            src: '/life-os-v2/favicon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
             purpose: 'any maskable'

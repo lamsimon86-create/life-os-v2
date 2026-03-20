@@ -56,8 +56,16 @@
     <!-- 5. Goal Progress -->
     <GoalProgress />
 
+    <!-- 5. Macro Tracker -->
+    <MacroTracker />
+
     <!-- 6. Up Next -->
     <UpNextCards @open-checkin="openCheckinModal" />
+
+    <!-- 8. Insights Carousel -->
+    <InsightsCarousel :total-cards="1">
+      <BodyCompositionCard />
+    </InsightsCarousel>
 
     <!-- Daily Check-in Modal -->
     <div
@@ -142,18 +150,25 @@ import { useFitnessStore } from '@/stores/fitness'
 import { useMealsStore } from '@/stores/meals'
 import { useGoalsStore } from '@/stores/goals'
 import { useCalendarStore } from '@/stores/calendar'
+import { useSupplementStore } from '@/stores/supplement'
+import { useBodyStore } from '@/stores/body'
 import BriefMeButton from '@/components/dashboard/BriefMeButton.vue'
 import WeeklyProgress from '@/components/dashboard/WeeklyProgress.vue'
 import TodayChecklist from '@/components/dashboard/TodayChecklist.vue'
 import GoalProgress from '@/components/dashboard/GoalProgress.vue'
 import UpNextCards from '@/components/dashboard/UpNextCards.vue'
 import AvatarCompanion from '@/components/dashboard/AvatarCompanion.vue'
+import MacroTracker from '@/components/dashboard/MacroTracker.vue'
+import InsightsCarousel from '@/components/dashboard/InsightsCarousel.vue'
+import BodyCompositionCard from '@/components/dashboard/BodyCompositionCard.vue'
 
 const userStore = useUserStore()
 const fitnessStore = useFitnessStore()
 const mealsStore = useMealsStore()
 const goalsStore = useGoalsStore()
 const calendarStore = useCalendarStore()
+const supplementStore = useSupplementStore()
+const bodyStore = useBodyStore()
 
 const greeting = computed(() => getGreeting())
 const formattedDate = computed(() => formatDate())
@@ -218,7 +233,9 @@ onMounted(async () => {
     fitnessStore.hydrate(),
     mealsStore.hydrate(),
     goalsStore.hydrate(),
-    calendarStore.hydrate()
+    calendarStore.hydrate(),
+    supplementStore.hydrate(),
+    bodyStore.hydrate()
   ])
 })
 </script>

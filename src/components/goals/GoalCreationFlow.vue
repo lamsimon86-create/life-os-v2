@@ -1,6 +1,10 @@
 <template>
   <div class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-800 rounded-2xl p-6 w-full max-w-md max-h-[85vh] overflow-y-auto">
+    <div class="bg-slate-800 rounded-2xl p-6 w-full max-w-md max-h-[85vh] overflow-y-auto relative">
+      <!-- Close button (all steps) -->
+      <button @click="$emit('close')" class="absolute top-4 right-4 text-slate-500 hover:text-slate-300">
+        <X class="w-4 h-4" />
+      </button>
 
       <!-- Step 1: Category -->
       <div v-if="step === 1">
@@ -23,7 +27,7 @@
             </div>
           </button>
         </div>
-        <button @click="$emit('close')" class="w-full mt-4 text-sm text-slate-500 hover:text-slate-300">Cancel</button>
+        <button @click="$emit('close')" class="w-full mt-3 text-sm text-slate-500 hover:text-slate-300">Cancel</button>
       </div>
 
       <!-- Step 2: Input -->
@@ -100,6 +104,7 @@
             {{ approving ? 'Setting up...' : 'Start This Goal' }}
           </button>
         </div>
+        <p v-if="error" class="text-xs text-red-400 mt-2">{{ error }}</p>
       </div>
     </div>
   </div>

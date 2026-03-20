@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 import { supabase } from '@/lib/supabase'
 import { calcMealXp } from '@/lib/gamification'
-import { getWeekStart, MEAL_TYPES } from '@/lib/constants'
+import { getWeekStart, MEAL_TYPES, getMondayWeekStart } from '@/lib/constants'
 
 export const useMealsStore = defineStore('meals', () => {
   const weekPlan = ref(null)
@@ -108,6 +108,59 @@ export const useMealsStore = defineStore('meals', () => {
     return data
   }
 
+  const weeklyMealProgress = computed(() => {
+    if (!weekPlan.value?.plan_data) return { logged: 0, planned: 0, percentage: 0 }
+
+    const weekStart = getMondayWeekStart()
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+    const todayStr = new Date().toISOString().split('T')[0]
+
+    let planned = 0
+    const startDate = new Date(weekStart + 'T00:00:00')
+    const endDate = new Date(todayStr + 'T23:59:59')
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      const dayName = dayNames[d.getDay()]
+      const dayPlan = weekPlan.value.plan_data[dayName]
+      if (dayPlan) {
+        planned += Object.keys(dayPlan).filter(k => dayPlan[k]).length
+      }
+    }
+
+    const logged = recentMeals.value.filter(m => {
+      return m.date >= weekStart
+    }).length
+
+    const percentage = planned > 0 ? Math.round((logged / planned) * 100) : 0
+    return { logged, planned, percentage }
+  })
+
+  const nextMealToLog = computed(() => {
+    const hour = new Date().getHours()
+
+    let targetType
+    if (hour < 10) targetType = 'breakfast'
+    else if (hour < 14) targetType = 'lunch'
+    else if (hour < 18) targetType = 'dinner'
+    else targetType = 'snack'
+
+    const loggedTypes = todaysMeals.value.map(m => m.meal_type)
+    const mealOrder = ['breakfast', 'lunch', 'dinner', 'snack']
+
+    const startIdx = mealOrder.indexOf(targetType)
+    for (let i = 0; i < mealOrder.length; i++) {
+      const type = mealOrder[(startIdx + i) % mealOrder.length]
+      if (!loggedTypes.includes(type)) {
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+        const todayName = dayNames[new Date().getDay()]
+        const todayPlan = weekPlan.value?.plan_data?.[todayName]
+        const planned = todayPlan?.[type] || null
+        return { type, planned }
+      }
+    }
+
+    return null
+  })
+
   function generatePlan() {
     openAiPanel.value = true
   }
@@ -131,5 +184,7 @@ export const useMealsStore = defineStore('meals', () => {
     approveRecipe,
     generatePlan,
     deleteRecipe,
+    weeklyMealProgress,
+    nextMealToLog,
   }
 })

@@ -11,22 +11,41 @@
       <div
         v-for="card in cards"
         :key="card.key"
-        class="bg-slate-800 rounded-xl p-3.5 flex justify-between items-center"
+        class="bg-slate-800 rounded-xl p-3.5"
         :class="`border-l-[3px] ${card.borderClass}`"
       >
-        <div class="min-w-0 pr-3">
-          <div class="text-sm font-semibold" :class="card.muted ? 'text-slate-500' : ''">{{ card.title }}</div>
-          <div class="text-[11px] text-slate-500 mt-0.5">{{ card.subtitle }}</div>
+        <div class="flex justify-between items-center">
+          <div class="min-w-0 pr-3">
+            <div class="text-sm font-semibold" :class="card.muted ? 'text-slate-500' : ''">{{ card.title }}</div>
+            <div class="text-[11px] text-slate-500 mt-0.5">{{ card.subtitle }}</div>
+          </div>
+          <button
+            v-if="card.action"
+            @click="card.action.handler"
+            class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold"
+            :class="card.action.class"
+          >
+            {{ card.action.label }}
+          </button>
+          <Check v-else-if="card.muted" class="w-4 h-4 text-green-500 shrink-0" />
         </div>
-        <button
-          v-if="card.action"
-          @click="card.action.handler"
-          class="shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold"
-          :class="card.action.class"
-        >
-          {{ card.action.label }}
-        </button>
-        <Check v-else-if="card.muted" class="w-4 h-4 text-green-500 shrink-0" />
+        <!-- Supplement checklist -->
+        <div v-if="card.supplements" class="w-full mt-2 flex flex-col gap-1.5 max-h-[200px] overflow-y-auto">
+          <div
+            v-for="supp in card.supplements"
+            :key="supp.id"
+            class="flex items-center justify-between"
+          >
+            <span class="text-xs" :class="supp.taken ? 'text-slate-500 line-through' : ''">{{ supp.name }}</span>
+            <button
+              @click.stop="supplementStore.toggleSupplement(supp.id)"
+              class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors shrink-0"
+              :class="supp.taken ? 'border-teal-400 bg-teal-400' : 'border-slate-500 hover:border-teal-400'"
+            >
+              <Check v-if="supp.taken" class="w-3 h-3 text-slate-900" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -39,6 +58,7 @@ import { Check } from 'lucide-vue-next'
 import { useFitnessStore } from '@/stores/fitness'
 import { useMealsStore } from '@/stores/meals'
 import { useUserStore } from '@/stores/user'
+import { useSupplementStore } from '@/stores/supplement'
 import { getGreeting } from '@/lib/constants'
 
 const emit = defineEmits(['openCheckin'])
@@ -47,6 +67,7 @@ const router = useRouter()
 const fitnessStore = useFitnessStore()
 const mealsStore = useMealsStore()
 const userStore = useUserStore()
+const supplementStore = useSupplementStore()
 
 const cards = computed(() => {
   const result = []
@@ -125,7 +146,7 @@ const cards = computed(() => {
 
   // Hydration card (always visible)
   const glasses = userStore.waterGlasses || 0
-  const waterGoal = 8
+  const waterGoal = userStore.waterGoal
   if (glasses < waterGoal) {
     incomplete.push({
       key: 'water',
@@ -146,6 +167,32 @@ const cards = computed(() => {
       borderClass: 'border-sky-400/50',
       muted: true
     })
+  }
+
+  // Supplement checklist card
+  const suppStatus = supplementStore.supplementStatus
+  if (suppStatus.due > 0) {
+    if (suppStatus.taken < suppStatus.due) {
+      incomplete.push({
+        key: 'supplements',
+        title: `Supplements — ${suppStatus.taken}/${suppStatus.due}`,
+        subtitle: `${suppStatus.due - suppStatus.taken} remaining`,
+        borderClass: 'border-teal-400',
+        supplements: supplementStore.todaysSupplements.map(s => ({
+          id: s.id,
+          name: s.name,
+          taken: supplementStore.isTaken(s.id)
+        }))
+      })
+    } else {
+      completed.push({
+        key: 'supplements-done',
+        title: `Supplements — ${suppStatus.taken}/${suppStatus.due}`,
+        subtitle: 'All taken',
+        borderClass: 'border-teal-400/50',
+        muted: true
+      })
+    }
   }
 
   // Daily check-in card

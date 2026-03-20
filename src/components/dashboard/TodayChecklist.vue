@@ -43,21 +43,14 @@
         </div>
       </div>
 
-      <!-- Schedule (if connected) -->
-      <div v-if="calendarStore.connected || calendarStore.todaysEvents.length > 0" class="flex items-start gap-2">
+      <!-- Schedule (only shows when calendar is connected and has events) -->
+      <div v-if="calendarStore.connected && calendarStore.todaysEvents.length > 0" class="flex items-start gap-2">
         <div class="w-[18px] h-[18px] rounded-full border-2 border-slate-500 shrink-0 mt-0.5"></div>
         <div>
           <div class="text-xs font-semibold">Schedule</div>
           <div class="text-[10px] text-slate-500">{{ scheduleSubtitle }}</div>
         </div>
       </div>
-      <router-link
-        v-else-if="!calendarStore.loading"
-        to="/settings"
-        class="text-[10px] text-blue-400 hover:text-blue-300 ml-7"
-      >
-        Connect calendar
-      </router-link>
 
       <!-- Daily Check-in -->
       <div class="flex items-start gap-2">

@@ -69,7 +69,9 @@
           v-for="goal in goalsStore.goals"
           :key="goal.id"
           :goal="goal"
+          :expanded="expandedGoalId === goal.id"
           @add-kr="openKrForm"
+          @toggle-focus="toggleGoalFocus"
         />
       </div>
 
@@ -130,12 +132,17 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { Plus } from 'lucide-vue-next'
+import { useRoute } from 'vue-router'
+import { Star } from 'lucide-vue-next'
 import { useGoalsStore } from '@/stores/goals'
 import GoalCard from '@/components/goals/GoalCard.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
 
 const goalsStore = useGoalsStore()
+
+const route = useRoute()
+const expandedGoalId = ref(route.query.expand || null)
 
 // New goal form state
 const showNewGoalForm = ref(false)
@@ -176,6 +183,10 @@ async function createGoal() {
   } finally {
     creating.value = false
   }
+}
+
+function toggleGoalFocus(goalId) {
+  goalsStore.toggleFocus(goalId)
 }
 
 function openKrForm(goalId) {

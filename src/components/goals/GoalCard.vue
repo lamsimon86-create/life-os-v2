@@ -1,5 +1,8 @@
 <template>
-  <div class="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
+  <div
+    class="rounded-xl bg-slate-900 p-4 space-y-3 border transition-colors"
+    :class="expanded ? 'border-brand-500/60' : 'border-slate-800'"
+  >
     <!-- Header -->
     <div class="flex items-start justify-between gap-2">
       <div class="flex items-center gap-2 min-w-0">
@@ -7,6 +10,14 @@
         <h3 class="text-sm font-semibold text-slate-100 truncate">{{ goal.title }}</h3>
       </div>
       <div class="flex items-center gap-1.5 shrink-0">
+        <button
+          @click.stop="emit('toggleFocus', goal.id)"
+          class="p-1 rounded transition-colors"
+          :class="goal.is_focused ? 'text-yellow-400' : 'text-slate-500 hover:text-slate-300'"
+          :title="goal.is_focused ? 'Unpin from dashboard' : 'Pin to dashboard'"
+        >
+          <Star class="w-4 h-4" :fill="goal.is_focused ? 'currentColor' : 'none'" />
+        </button>
         <button
           class="rounded-lg px-2.5 py-1 text-xs font-medium transition-colors"
           :class="
@@ -64,7 +75,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { Target, Trash2, Plus } from 'lucide-vue-next'
+import { Target, Trash2, Plus, Star } from 'lucide-vue-next'
 import { useGoalsStore } from '@/stores/goals'
 import ProgressBar from '@/components/shared/ProgressBar.vue'
 import KeyResultRow from './KeyResultRow.vue'
@@ -74,9 +85,13 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  expanded: {
+    type: Boolean,
+    default: false,
+  },
 })
 
-const emit = defineEmits(['addKr'])
+const emit = defineEmits(['addKr', 'toggleFocus'])
 
 const goalsStore = useGoalsStore()
 

@@ -62,6 +62,34 @@
           </div>
         </div>
 
+        <!-- Health Tracking -->
+        <div class="mt-6">
+          <h2 class="text-lg font-bold text-brand-400 mb-4">Health Tracking</h2>
+
+          <div class="grid grid-cols-3 gap-3 mb-4">
+            <div>
+              <label class="mb-1 block text-sm text-slate-300">Water Goal</label>
+              <input v-model.number="waterGoal" type="number" min="1" max="20"
+                class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100" />
+              <span class="text-[10px] text-slate-500">glasses/day</span>
+            </div>
+            <div>
+              <label class="mb-1 block text-sm text-slate-300">Protein Target</label>
+              <input v-model.number="proteinTarget" type="number" min="0"
+                class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100" />
+              <span class="text-[10px] text-slate-500">grams/day</span>
+            </div>
+            <div>
+              <label class="mb-1 block text-sm text-slate-300">Calorie Target</label>
+              <input v-model.number="calorieTarget" type="number" min="0"
+                class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100" />
+              <span class="text-[10px] text-slate-500">kcal/day</span>
+            </div>
+          </div>
+
+          <SupplementSettings />
+        </div>
+
         <!-- Save -->
         <button
           type="submit"
@@ -92,10 +120,13 @@ import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useAuthStore } from '@/stores/auth'
 import { DIFFICULTY_PRESETS } from '@/lib/constants'
+import SupplementSettings from '@/components/settings/SupplementSettings.vue'
+import { useSupplementStore } from '@/stores/supplement'
 
 const router = useRouter()
 const user = useUserStore()
 const auth = useAuthStore()
+const supplementStore = useSupplementStore()
 
 const saving = ref(false)
 const toast = ref('')
@@ -107,24 +138,39 @@ const form = ref({
   difficulty: 'medium',
 })
 
+const waterGoal = ref(8)
+const proteinTarget = ref(150)
+const calorieTarget = ref(2200)
+
 onMounted(() => {
   if (user.profile) {
     form.value.name = user.profile.name || ''
     form.value.age = user.profile.age || null
     form.value.weight_kg = user.profile.weight_kg || null
     form.value.difficulty = user.profile.difficulty || 'medium'
+    waterGoal.value = user.profile.preferences?.daily_water_goal || 8
+    proteinTarget.value = user.profile.preferences?.daily_protein_target || 150
+    calorieTarget.value = user.profile.preferences?.daily_calorie_target || 2200
   }
+  supplementStore.hydrate()
 })
 
 async function save() {
   saving.value = true
   toast.value = ''
   try {
+    const preferences = {
+      ...user.profile?.preferences,
+      daily_water_goal: waterGoal.value,
+      daily_protein_target: proteinTarget.value,
+      daily_calorie_target: calorieTarget.value,
+    }
     await user.updateProfile({
       name: form.value.name,
       age: form.value.age,
       weight_kg: form.value.weight_kg,
       difficulty: form.value.difficulty,
+      preferences,
     })
     toast.value = 'Changes saved.'
     setTimeout(() => { toast.value = '' }, 3000)

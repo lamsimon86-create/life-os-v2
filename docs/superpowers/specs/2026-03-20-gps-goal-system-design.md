@@ -228,23 +228,27 @@ CREATE UNIQUE INDEX idx_v2_goals_active_category
 - Add `goalsByCategory` computed: `{ body: goal|null, nutrition: goal|null, performance: goal|null }`
 - Add `destinationGoals` computed: active goals for the Destination Strip
 - Add `createGoalWithAI(category, userText)`: sends to AI, gets refinement, returns for user approval
-- Add `approveGoal(refinedGoal, prescribedTrackers)`: saves goal + key results + trackers, triggers dashboard reconfiguration
-- Add `completeGoal(goalId)`: mark complete, award XP, prompt for next goal
-- Add `goalCountdown(goal)` computed helper: returns `{ days, label }` ("67 days" or "2 months")
+- Add `approveGoal(refinedGoal, prescribedTrackers)`: saves goal + key results + trackers. Also writes prescribed targets to `v2_profiles.preferences` (e.g., `daily_protein_target`, `daily_water_goal`) so existing store computeds pick them up without cross-store dependencies. Then auto-adds prescribed supplements via `supplementStore.addSupplement()` (with dedup check by name, default frequency `'daily'`).
+- Add `completeGoal(goalId)`: mark complete (set `status = 'completed'`, `updated_at = now()`), award XP using `calcStreakMultiplier(streak)` from `gamification.js` (500 XP base on-time, 750 XP early), prompt for next goal
+- Add `goalCountdown(goal)` helper: returns `{ days, label }` ("67 days" or "2 months")
+- Add `activeTrackers` computed: all active trackers from `v2_goal_trackers` for current user. Fetched during `hydrate()`.
+- Add `getTarget(type)`: returns daily target for a tracker type. When multiple goals prescribe the same type, returns `Math.max(...)` of all active targets for that type. Returns `null` if no tracker of that type is prescribed.
+- Add `hasTracker(type)` computed helper: returns boolean for conditional rendering
 
-### New: trackerStore (or extend goalsStore)
-- `activeTrackers` computed: all active trackers from `v2_goal_trackers` for current user
-- `getTarget(type)`: returns the daily target for a tracker type (e.g., protein → 180)
-- Used by MacroTracker, UpNextCards, TodayChecklist, WeeklyProgress to determine what to show and what targets to use
+### Target Precedence Chain
+Trackers write to `v2_profiles.preferences` on goal approval, so existing store computeds (`mealsStore.proteinTarget`, `userStore.waterGoal`) continue to read from preferences as they do today. No cross-store dependency needed. When a goal completes, preferences values remain — user can change them manually in Settings afterward.
+
+**Settings UI behavior:** When a target is prescribed by an active goal, the Settings input shows the current value with a note: "Set by your [Goal Name] goal." User can still edit it — their edit overrides the prescribed value in preferences.
 
 ### mealsStore (modify)
-- `proteinTarget` and `calorieTarget` now read from `trackerStore.getTarget('protein')` and `trackerStore.getTarget('calories')` instead of hardcoded preferences. Falls back to preferences if no tracker prescribed.
+- No changes to `proteinTarget`/`calorieTarget` computeds — they already read from preferences, which `approveGoal()` now writes to.
 
 ### userStore (modify)
-- `waterGoal` now reads from `trackerStore.getTarget('water')` first, falls back to preferences.
+- No changes to `waterGoal` — already reads from preferences.
 
 ### supplementStore (modify)
-- On goal approval, if trackers include supplements, auto-add them to the user's supplement list.
+- On goal approval, `goalsStore.approveGoal()` calls `supplementStore.addSupplement(name, 'daily')` for each prescribed supplement. Dedup: skip if a supplement with the same name (case-insensitive) already exists.
+- Supplements added by goals are NOT removed when a goal completes — user may want to keep them.
 
 ## Components
 
@@ -252,50 +256,136 @@ CREATE UNIQUE INDEX idx_v2_goals_active_category
 | Component | Responsibility |
 |-----------|---------------|
 | `src/components/dashboard/DestinationStrip.vue` | Compact goal cards with countdown timers |
-| `src/components/goals/GoalCreationFlow.vue` | Multi-step: category → input → AI refine → approve trackers |
+| `src/components/goals/GoalCreationFlow.vue` | Multi-step modal: category → input → AI refine → approve trackers. Triggered from: Destination Strip "Set your first goal" CTA, GoalsView "+" button, Onboarding step. Rendered as a full-screen modal/overlay. |
 | `src/components/goals/GoalCompletionModal.vue` | Celebration + suggest next goal |
 
 ### Modified
 | Component | Changes |
 |-----------|---------|
-| `DashboardView.vue` | Replace GoalProgress with DestinationStrip, conditionally render sections based on active trackers |
-| `MacroTracker.vue` | Read targets from trackerStore, hide if no macro trackers prescribed |
+| `DashboardView.vue` | Replace GoalProgress with DestinationStrip, conditionally render MacroTracker/water/supplement cards based on `goalsStore.hasTracker()` (graceful: show all if no goals set yet for backward compat during transition) |
+| `MacroTracker.vue` | Hide via `v-if="goalsStore.hasTracker('protein') \|\| goalsStore.hasTracker('calories')"` (or show always if no goals exist yet) |
 | `UpNextCards.vue` | Conditionally show water/supplement cards based on active trackers |
 | `WeeklyProgress.vue` | Workout ring target from tracker if prescribed |
 | `TodayChecklist.vue` | Items appear/disappear based on active trackers |
-| `GoalsView.vue` | Integrate GoalCreationFlow, show goals by category |
-| `OnboardingView.vue` | Add goal-setting step |
-| `BriefMeButton.vue` | Enhanced prompt with goal context and progress |
+| `GoalsView.vue` | Integrate GoalCreationFlow modal, show goals grouped by category (Body / Nutrition / Performance sections), replace inline form with GoalCreationFlow trigger |
+| `OnboardingView.vue` | Replace existing Step 2 ("Your Goal" with SMART fields) with GoalCreationFlow. Step count remains 6. |
+| `BriefMeButton.vue` | Enhanced prompt with goal context and countdown progress |
 
-### Removed
-| Component | Replaced by |
-|-----------|------------|
-| `GoalProgress.vue` | `DestinationStrip.vue` |
+### Modified but NOT Removed
+| Component | Note |
+|-----------|------|
+| `GoalProgress.vue` | Replaced by `DestinationStrip.vue` on the dashboard. The detailed goal view (progress bars, KR summaries) moves to a tap-to-expand detail panel accessible from the Destination Strip. Tapping a goal in the strip opens a bottom sheet showing: full progress bar, key results with values, prescribed trackers, edit/extend deadline options. |
+
+## Destination Strip — Tap Interaction
+
+Tapping a goal card in the Destination Strip opens a **bottom sheet** (not navigation to GoalsView) showing:
+- Goal title + category
+- Full progress bar with percentage
+- Key results with current/target values
+- Countdown with deadline date
+- Prescribed trackers list with current daily targets
+- "Edit Goal" link → navigates to GoalsView
+- "Extend Deadline" button → AI recalculates
+
+This preserves the detailed goal information that GoalProgress.vue provided without cluttering the always-visible strip.
+
+## Database Changes
+
+### Migration
+
+```sql
+-- Goal system enhancements
+ALTER TABLE v2_goals ADD COLUMN category text;
+ALTER TABLE v2_goals ADD COLUMN original_text text;
+ALTER TABLE v2_goals ADD COLUMN difficulty text;
+ALTER TABLE v2_goals ADD COLUMN ai_refined boolean DEFAULT false;
+ALTER TABLE v2_goals ADD COLUMN updated_at timestamptz DEFAULT now();
+
+-- Auto-update updated_at on row changes
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_v2_goals_updated_at
+  BEFORE UPDATE ON v2_goals
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- One active goal per category per user
+CREATE UNIQUE INDEX idx_v2_goals_active_category
+  ON v2_goals (user_id, category)
+  WHERE status = 'active';
+
+-- Goal trackers
+CREATE TABLE v2_goal_trackers (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  goal_id uuid REFERENCES v2_goals(id) ON DELETE CASCADE NOT NULL,
+  tracker_type text NOT NULL,
+  daily_target numeric,
+  unit text,
+  supplement_name text,
+  reason text,
+  is_active boolean DEFAULT true,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE v2_goal_trackers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users manage own goal trackers" ON v2_goal_trackers FOR ALL USING (auth.uid() = user_id);
+CREATE INDEX idx_v2_goal_trackers_user_type ON v2_goal_trackers (user_id, tracker_type) WHERE is_active = true;
+```
+
+## AI Response Parsing
+
+The AI prompt asks for JSON. Parse the response using the same regex strategy as `estimateMacros()` in mealsStore:
+```javascript
+const match = data.message.match(/\{[\s\S]*\}/)
+if (match) return JSON.parse(match[0])
+```
+If parsing fails, show an error toast and let the user retry. Do not save a goal with malformed AI data.
+
+## XP Awards
+
+Use existing `calcStreakMultiplier(streak)` from `gamification.js`:
+- Goal completed on time: `Math.round(500 * calcStreakMultiplier(streak))` XP
+- Goal completed early: `Math.round(750 * calcStreakMultiplier(streak))` XP
+- Key result milestone hit: `Math.round(100 * calcStreakMultiplier(streak))` XP
+
+## Progress Calculation for Destination Strip
+
+Destination Strip progress % is calculated from `v2_key_results` using the existing `goalsStore.goalProgress(goal)` — average of `(current_value / target_value * 100)` across all key results. Daily tracker targets (protein, water, etc.) are NOT used for the progress calculation — they are daily actions, not milestone metrics.
 
 ## Edge Cases
 
 ### No goals set
 - Destination Strip shows "Set your first goal" CTA
-- Dashboard shows minimal view: header, XP, Brief Me, workout card only
-- No macro tracker, no supplement card, no water card
+- Dashboard shows ALL trackers with default values (backward compatible — protein 150g, water 8, etc. from preferences). This avoids a broken dashboard during transition.
+- Once user sets their first goal, trackers reconfigure to prescribed values.
 
 ### Goal with no prescribed trackers
-- Unlikely (AI always prescribes something), but if it happens: goal shows in Destination Strip, no daily trackers generated
+- Unlikely (AI always prescribes something), but if it happens: goal shows in Destination Strip, dashboard keeps showing trackers from preferences defaults.
 
 ### User removes all prescribed trackers manually
 - Goal still shows in Destination Strip with countdown
-- Dashboard reverts to minimal view for that goal's trackers
-- User can re-add trackers in Settings
+- Preferences retain the last-set values, so trackers continue showing.
 
 ### Multiple goals prescribe the same tracker type
 - e.g., Body goal prescribes protein 180g AND Nutrition goal prescribes protein 200g
-- Use the HIGHER target (more demanding wins)
-- Store tracks which goal each tracker belongs to
+- `approveGoal()` writes the HIGHER value to preferences
+- `getTarget(type)` returns `Math.max(...)` across all active trackers of that type
 
 ### Goal deadline extended
-- User can extend via goal detail view
+- User can extend via goal detail bottom sheet
 - AI recalculates daily targets for the new timeline
+- `approveGoal()` updates preferences with new targets
 - Countdown resets
 
 ### Mid-goal difficulty change
 - If user changes difficulty in Settings, offer to recalculate current goals' timelines and targets
+
+### Supplement deduplication
+- On goal approval, if a supplement with the same name (case-insensitive) already exists in the user's list, skip adding it. Do not create duplicates.

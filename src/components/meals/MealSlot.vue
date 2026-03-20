@@ -44,6 +44,24 @@
       </button>
 
       <div v-else class="space-y-2">
+        <!-- Description field with AI estimation -->
+        <div>
+          <textarea
+            v-model="form.description"
+            placeholder="Describe what you ate (AI estimates macros)..."
+            rows="2"
+            class="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 outline-none focus:ring-2 focus:ring-brand-600 resize-none"
+          ></textarea>
+          <button
+            v-if="form.description && !estimating"
+            @click="estimateFromDescription"
+            class="text-xs text-blue-400 hover:text-blue-300 mt-1"
+          >
+            Estimate macros with AI
+          </button>
+          <span v-if="estimating" class="text-xs text-slate-500 mt-1 block">Estimating...</span>
+        </div>
+
         <input
           v-model="form.name"
           type="text"
@@ -79,6 +97,15 @@
             Cancel
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- "Will you eat this again?" prompt -->
+    <div v-if="showSavePrompt" class="mt-2 p-2 bg-slate-700/50 rounded-lg flex items-center justify-between">
+      <span class="text-xs text-slate-300">Will you eat this again?</span>
+      <div class="flex gap-2">
+        <button @click="saveForReuse" class="text-xs text-blue-400 hover:text-blue-300">Yes, save it</button>
+        <button @click="showSavePrompt = false" class="text-xs text-slate-500 hover:text-slate-300">No</button>
       </div>
     </div>
   </div>
@@ -118,7 +145,19 @@ const { show: showToast } = useToast()
 
 const showForm = ref(false)
 const saving = ref(false)
-const form = ref({ name: '', calories: null, protein_g: null })
+const estimating = ref(false)
+const showSavePrompt = ref(false)
+
+const form = ref({
+  name: '',
+  calories: null,
+  protein_g: null,
+  description: '',
+  confidence: null,
+})
+
+// Store last logged meal data for the save-for-reuse prompt
+const lastLoggedForm = ref(null)
 
 const mealIcon = computed(() => {
   const icons = {
@@ -132,7 +171,23 @@ const mealIcon = computed(() => {
 
 function cancel() {
   showForm.value = false
-  form.value = { name: '', calories: null, protein_g: null }
+  form.value = { name: '', calories: null, protein_g: null, description: '', confidence: null }
+}
+
+async function estimateFromDescription() {
+  if (!form.value.description) return
+  estimating.value = true
+  try {
+    const result = await mealsStore.estimateMacros(form.value.description)
+    form.value.calories = result.calories
+    form.value.protein_g = result.protein
+    form.value.confidence = result.confidence
+    if (!form.value.name) form.value.name = form.value.description.slice(0, 50)
+  } catch (e) {
+    showToast('Could not estimate macros', 'error')
+  } finally {
+    estimating.value = false
+  }
 }
 
 async function submit() {
@@ -146,8 +201,17 @@ async function submit() {
       name: form.value.name.trim(),
       calories: form.value.calories || null,
       protein_g: form.value.protein_g || null,
+      description: form.value.description || null,
+      confidence: form.value.confidence || null,
     })
     showToast('Meal logged!', 'success')
+
+    // Show "eat again?" prompt if description and macros are present
+    if (form.value.description && (form.value.calories || form.value.protein_g)) {
+      lastLoggedForm.value = { ...form.value }
+      showSavePrompt.value = true
+    }
+
     cancel()
   } catch (err) {
     console.error('Failed to log meal:', err)
@@ -155,5 +219,21 @@ async function submit() {
   } finally {
     saving.value = false
   }
+}
+
+async function saveForReuse() {
+  const data = lastLoggedForm.value
+  if (!data) {
+    showSavePrompt.value = false
+    return
+  }
+  await mealsStore.saveAsMeal({
+    name: data.name || data.description?.slice(0, 50),
+    description: data.description,
+    calories: data.calories,
+    protein: data.protein_g,
+  })
+  showSavePrompt.value = false
+  showToast('Meal saved for reuse!', 'success')
 }
 </script>

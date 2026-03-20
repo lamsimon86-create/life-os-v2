@@ -43,6 +43,20 @@
         </div>
       </div>
 
+      <!-- Supplements -->
+      <div v-if="supplementStore.todaysSupplements.length > 0" class="flex items-start gap-2">
+        <div
+          class="w-[18px] h-[18px] rounded-full border-2 shrink-0 mt-0.5 flex items-center justify-center"
+          :class="suppStatus.class"
+        >
+          <Check v-if="suppStatus.done" class="w-2.5 h-2.5 text-slate-900" />
+        </div>
+        <div>
+          <div class="text-xs font-semibold">Supplements</div>
+          <div class="text-[10px] text-slate-500">{{ suppStatus.subtitle }}</div>
+        </div>
+      </div>
+
       <!-- Schedule (only shows when calendar is connected and has events) -->
       <div v-if="calendarStore.connected && calendarStore.todaysEvents.length > 0" class="flex items-start gap-2">
         <div class="w-[18px] h-[18px] rounded-full border-2 border-slate-500 shrink-0 mt-0.5"></div>
@@ -81,7 +95,7 @@
         </div>
         <div>
           <div class="text-xs font-semibold">Water</div>
-          <div class="text-[10px] text-slate-500">{{ userStore.waterGlasses }}/8 glasses</div>
+          <div class="text-[10px] text-slate-500">{{ userStore.waterGlasses }}/{{ userStore.waterGoal }} glasses</div>
         </div>
       </div>
     </div>
@@ -96,12 +110,14 @@ import { useMealsStore } from '@/stores/meals'
 import { useGoalsStore } from '@/stores/goals'
 import { useUserStore } from '@/stores/user'
 import { useCalendarStore } from '@/stores/calendar'
+import { useSupplementStore } from '@/stores/supplement'
 
 const fitnessStore = useFitnessStore()
 const mealsStore = useMealsStore()
 const goalsStore = useGoalsStore()
 const userStore = useUserStore()
 const calendarStore = useCalendarStore()
+const supplementStore = useSupplementStore()
 
 const workoutStatus = computed(() => {
   const workout = fitnessStore.todaysWorkout
@@ -180,9 +196,18 @@ const goalStatus = computed(() => {
 
 const hydrationStatus = computed(() => {
   const glasses = userStore.waterGlasses || 0
-  if (glasses >= 8) return { class: 'border-green-500 bg-green-500', done: true }
+  const goal = userStore.waterGoal
+  if (glasses >= goal) return { class: 'border-green-500 bg-green-500', done: true }
   if (glasses > 0) return { class: 'border-amber-500', done: false }
   return { class: 'border-slate-500', done: false }
+})
+
+const suppStatus = computed(() => {
+  const { taken, due } = supplementStore.supplementStatus
+  if (due === 0) return { subtitle: 'None today', class: 'border-slate-500', done: false }
+  if (taken >= due) return { subtitle: `${taken}/${due} taken`, class: 'border-green-500 bg-green-500', done: true }
+  if (taken > 0) return { subtitle: `${taken}/${due} taken`, class: 'border-amber-500', done: false }
+  return { subtitle: `0/${due} taken`, class: 'border-slate-500', done: false }
 })
 
 const scheduleSubtitle = computed(() => {

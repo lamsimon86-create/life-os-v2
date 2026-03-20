@@ -73,6 +73,15 @@
       </div>
     </div>
 
+    <!-- Water Weekly -->
+    <div class="flex items-center gap-2 mt-1 pt-2 border-t border-slate-700">
+      <Droplets class="w-4 h-4 text-sky-400 shrink-0" />
+      <div>
+        <div class="text-xs font-semibold">Water</div>
+        <div class="text-[10px] text-slate-500">{{ userStore.weeklyWater }}/{{ weeklyWaterGoal }} glasses</div>
+      </div>
+    </div>
+
     <!-- Last Workout -->
     <div v-if="lastWorkout" class="mt-3 pt-2 border-t border-slate-700">
       <div class="text-[10px] text-slate-500">
@@ -91,13 +100,16 @@
 
 <script setup>
 import { computed } from 'vue'
+import { Droplets } from 'lucide-vue-next'
 import { useFitnessStore } from '@/stores/fitness'
 import { useMealsStore } from '@/stores/meals'
 import { useGoalsStore } from '@/stores/goals'
+import { useUserStore } from '@/stores/user'
 
 const fitnessStore = useFitnessStore()
 const mealsStore = useMealsStore()
 const goalsStore = useGoalsStore()
+const userStore = useUserStore()
 
 const circumference = 2 * Math.PI * 15 // ~94.2
 
@@ -122,4 +134,11 @@ const workoutDash = computed(() => {
 const mealDash = computed(() => (mp.value.percentage / 100) * circumference)
 
 const goalDash = computed(() => (goalProgress.value / 100) * circumference)
+
+const weeklyWaterGoal = computed(() => {
+  const now = new Date()
+  const day = now.getDay()
+  const daysElapsed = day === 0 ? 7 : day // Sunday = 7 days elapsed
+  return userStore.waterGoal * daysElapsed
+})
 </script>

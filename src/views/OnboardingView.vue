@@ -66,43 +66,43 @@
           </div>
         </OnboardingStep>
 
-        <!-- Step 2: Your Goal (SMART) -->
+        <!-- Step 2: Your Goals (AI-Driven) -->
         <OnboardingStep
           v-if="currentStep === 2"
           :step="2"
-          title="Your Goal"
-          subtitle="Set a SMART goal — Specific, Measurable, Achievable, Relevant, Time-bound."
+          title="Your Goals"
+          subtitle="Set up to 3 goals — AI will build your plan. You can also skip and do this later."
         >
           <div class="space-y-4">
-            <div>
-              <label class="block text-sm text-slate-400 mb-1">What do you want to achieve? <span class="text-brand-400">*</span></label>
-              <input
-                v-model="form.goal_specific"
-                type="text"
-                placeholder="e.g. Lose body fat and build visible abs"
-                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500"
-              />
-              <p class="text-[11px] text-slate-500 mt-1">Be specific — not "get fit" but exactly what you want</p>
+            <!-- Summary of goals created so far -->
+            <div v-if="onboardingGoalsCreated > 0" class="text-sm text-green-400">
+              {{ onboardingGoalsCreated }} goal{{ onboardingGoalsCreated > 1 ? 's' : '' }} set
             </div>
-            <div>
-              <label class="block text-sm text-slate-400 mb-1">How will you measure it?</label>
-              <input
-                v-model="form.goal_measurable"
-                type="text"
-                placeholder="e.g. Drop from 185lbs to 170lbs, see abs in mirror"
-                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500"
-              />
-              <p class="text-[11px] text-slate-500 mt-1">A number, a milestone, or a clear indicator of success</p>
+
+            <!-- Category buttons to launch goal creation -->
+            <div class="flex flex-col gap-2">
+              <button
+                v-for="cat in onboardingCategories"
+                :key="cat.value"
+                @click="startGoalCreation(cat.value)"
+                :disabled="goalsStore.goalsByCategory[cat.value] !== null"
+                class="flex items-center gap-3 p-4 rounded-xl text-left transition-colors"
+                :class="goalsStore.goalsByCategory[cat.value] !== null
+                  ? 'bg-green-900/20 border border-green-800/50 opacity-70'
+                  : 'bg-slate-800 hover:bg-slate-700'"
+              >
+                <div class="text-sm font-semibold">{{ cat.label }}</div>
+                <div class="text-xs text-slate-500">{{ cat.description }}</div>
+                <div v-if="goalsStore.goalsByCategory[cat.value]" class="ml-auto text-xs text-green-400">Done</div>
+              </button>
             </div>
-            <div>
-              <label class="block text-sm text-slate-400 mb-1">By when?</label>
-              <input
-                v-model="form.goal_deadline"
-                type="date"
-                class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-slate-100"
-              />
-              <p class="text-[11px] text-slate-500 mt-1">A realistic deadline keeps you accountable</p>
-            </div>
+
+            <!-- GoalCreationFlow inline (as modal overlay when active) -->
+            <GoalCreationFlow
+              v-if="showOnboardingGoalCreation"
+              @close="showOnboardingGoalCreation = false"
+              @created="onGoalCreated"
+            />
           </div>
         </OnboardingStep>
 
@@ -349,7 +349,7 @@
         v-else
         type="button"
         class="px-6 py-3 bg-brand-600 rounded-lg text-white font-medium hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="(currentStep === 1 && !form.name.trim()) || (currentStep === 2 && !form.goal_specific.trim())"
+        :disabled="(currentStep === 1 && !form.name.trim())"
         @click="next"
       >
         Next
@@ -364,11 +364,14 @@ import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
+import { useGoalsStore } from '@/stores/goals'
 import OnboardingStep from '@/components/onboarding/OnboardingStep.vue'
+import GoalCreationFlow from '@/components/goals/GoalCreationFlow.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
 const userStore = useUserStore()
+const goalsStore = useGoalsStore()
 
 const totalSteps = 6
 const currentStep = ref(1)
@@ -383,10 +386,6 @@ const form = ref({
   age: null,
   height_cm: null,
   weight_lbs: null,
-  goal_text: '',
-  goal_specific: '',
-  goal_measurable: '',
-  goal_deadline: '',
   experience: 'beginner',
   days_per_week: 4,
   equipment: 'Full Gym',
@@ -398,6 +397,24 @@ const form = ref({
   meals_per_day: 3,
   difficulty: 'medium'
 })
+
+const onboardingGoalsCreated = ref(0)
+const showOnboardingGoalCreation = ref(false)
+
+const onboardingCategories = [
+  { value: 'body', label: 'Body', description: 'Physique, weight, composition' },
+  { value: 'nutrition', label: 'Nutrition', description: 'Diet, eating habits' },
+  { value: 'performance', label: 'Performance', description: 'Strength, speed, endurance' }
+]
+
+function startGoalCreation(category) {
+  showOnboardingGoalCreation.value = true
+}
+
+function onGoalCreated() {
+  onboardingGoalsCreated.value++
+  showOnboardingGoalCreation.value = false
+}
 
 const difficultyOptions = [
   {
@@ -453,7 +470,7 @@ watch(currentStep, async (step) => {
             age: form.value.age,
             height_cm: form.value.height_cm,
             weight_lbs: form.value.weight_lbs,
-            goal: form.value.goal_specific + (form.value.goal_measurable ? ' — Measure: ' + form.value.goal_measurable : '') + (form.value.goal_deadline ? ' — By: ' + form.value.goal_deadline : ''),
+            goals: goalsStore.activeGoals.map(g => ({ title: g.title, category: g.category })),
             experience: form.value.experience,
             days_per_week: form.value.days_per_week,
             equipment: form.value.equipment,
@@ -519,39 +536,6 @@ async function finish() {
       )
 
     if (profileError) throw profileError
-
-    // Create SMART goal if provided
-    if (form.value.goal_specific.trim()) {
-      const smartTitle = form.value.goal_specific.trim()
-      const smartDescription = form.value.goal_measurable ? `Measure: ${form.value.goal_measurable.trim()}` : null
-
-      const { data: goalData, error: goalError } = await supabase
-        .from('v2_goals')
-        .insert({
-          user_id: auth.userId,
-          title: smartTitle,
-          description: smartDescription,
-          target_date: form.value.goal_deadline || null,
-          status: 'active'
-        })
-        .select()
-        .single()
-
-      if (goalError) throw goalError
-
-      // Auto-create a key result from the measurable field
-      if (form.value.goal_measurable.trim() && goalData) {
-        await supabase.from('v2_key_results').insert({
-          goal_id: goalData.id,
-          user_id: auth.userId,
-          title: form.value.goal_measurable.trim(),
-          current_value: 0,
-          target_value: 100,
-          unit: '%',
-          deadline: form.value.goal_deadline || null,
-        })
-      }
-    }
 
     // Save AI-generated fitness program if returned
     const programAction = aiActions.value.find(a => a.type === 'create_program')

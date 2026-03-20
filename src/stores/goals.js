@@ -12,6 +12,25 @@ export const useGoalsStore = defineStore('goals', () => {
   const activeGoals = computed(() => goals.value.filter((g) => g.status === 'active'))
   const topGoals = computed(() => activeGoals.value.slice(0, 2))
 
+  const focusedGoals = computed(() =>
+    goals.value.filter(g => g.status === 'active' && g.is_focused)
+  )
+
+  const focusedCount = computed(() => focusedGoals.value.length)
+
+  const dashboardGoals = computed(() => {
+    if (focusedGoals.value.length > 0) {
+      return focusedGoals.value.slice(0, 3)
+    }
+    return [...activeGoals.value]
+      .sort((a, b) => {
+        if (!a.target_date) return 1
+        if (!b.target_date) return -1
+        return new Date(a.target_date) - new Date(b.target_date)
+      })
+      .slice(0, 3)
+  })
+
   function goalProgress(goal) {
     const krs = goal.key_results
     if (!krs || krs.length === 0) return 0
@@ -138,11 +157,28 @@ export const useGoalsStore = defineStore('goals', () => {
     goals.value = goals.value.filter((g) => g.id !== id)
   }
 
+  async function toggleFocus(goalId) {
+    const goal = goals.value.find(g => g.id === goalId)
+    if (!goal) return
+    if (!goal.is_focused && focusedCount.value >= 3) return
+    const newValue = !goal.is_focused
+    const { error } = await supabase
+      .from('v2_goals')
+      .update({ is_focused: newValue })
+      .eq('id', goalId)
+    if (!error) {
+      goal.is_focused = newValue
+    }
+  }
+
   return {
     goals,
     loading,
     activeGoals,
     topGoals,
+    focusedGoals,
+    focusedCount,
+    dashboardGoals,
     goalProgress,
     hydrate,
     createGoal,
@@ -150,5 +186,6 @@ export const useGoalsStore = defineStore('goals', () => {
     updateKeyResult,
     updateGoalStatus,
     deleteGoal,
+    toggleFocus,
   }
 })

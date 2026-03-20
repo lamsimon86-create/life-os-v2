@@ -108,10 +108,14 @@ async function briefMe() {
   const mealProgress = mealsStore.weeklyMealProgress
   parts.push(`Meals this week: ${mealProgress.logged}/${mealProgress.planned} logged (${mealProgress.percentage}%).`)
 
-  const goals = goalsStore.dashboardGoals
-  if (goals.length > 0) {
-    const goalList = goals.map(g => `${g.title} (${goalsStore.goalProgress(g)}%)`).join(', ')
-    parts.push(`Focus goals: ${goalList}.`)
+  // Goals with countdown
+  const destGoals = goalsStore.destinationGoals
+  if (destGoals.length > 0) {
+    const goalSummaries = destGoals.map(g => {
+      const cd = goalsStore.goalCountdown(g)
+      return `${g.title} (${goalsStore.goalProgress(g)}% done, ${cd?.label || 'no deadline'})`
+    }).join(', ')
+    parts.push(`Long-term goals: ${goalSummaries}.`)
   }
 
   const wc = fitnessStore.weeklyWorkoutCount

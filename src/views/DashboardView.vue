@@ -50,17 +50,14 @@
     <!-- 4. Brief Me -->
     <BriefMeButton />
 
-    <!-- 5. This Week | Today Split -->
-    <div class="grid grid-cols-2 gap-2.5">
-      <WeeklyProgress />
-      <TodayChecklist />
-    </div>
+    <!-- 5. This Week -->
+    <WeeklyProgress />
 
-    <!-- 6. Macro Tracker -->
+    <!-- 6. Action Checklist -->
+    <ActionChecklist @open-checkin="openCheckinModal" />
+
+    <!-- 7. Macro Tracker -->
     <MacroTracker v-if="goalsStore.hasTracker('protein') || goalsStore.hasTracker('calories') || goalsStore.destinationGoals.length === 0" />
-
-    <!-- 7. Up Next -->
-    <UpNextCards @open-checkin="openCheckinModal" />
 
     <!-- 8. Insights -->
     <InsightsCarousel :total-cards="1">
@@ -161,10 +158,9 @@ import { useSupplementStore } from '@/stores/supplement'
 import { useBodyStore } from '@/stores/body'
 import BriefMeButton from '@/components/dashboard/BriefMeButton.vue'
 import WeeklyProgress from '@/components/dashboard/WeeklyProgress.vue'
-import TodayChecklist from '@/components/dashboard/TodayChecklist.vue'
+import ActionChecklist from '@/components/dashboard/ActionChecklist.vue'
 import DestinationStrip from '@/components/dashboard/DestinationStrip.vue'
 import GoalCreationFlow from '@/components/goals/GoalCreationFlow.vue'
-import UpNextCards from '@/components/dashboard/UpNextCards.vue'
 import AvatarCompanion from '@/components/dashboard/AvatarCompanion.vue'
 import MacroTracker from '@/components/dashboard/MacroTracker.vue'
 import InsightsCarousel from '@/components/dashboard/InsightsCarousel.vue'

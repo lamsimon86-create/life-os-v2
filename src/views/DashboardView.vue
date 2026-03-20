@@ -44,25 +44,25 @@
       </div>
     </div>
 
-    <!-- 3. Brief Me -->
+    <!-- 3. Destination Strip -->
+    <DestinationStrip @create-goal="showGoalCreation = true" />
+
+    <!-- 4. Brief Me -->
     <BriefMeButton />
 
-    <!-- 4. This Week | Today Split -->
+    <!-- 5. This Week | Today Split -->
     <div class="grid grid-cols-2 gap-2.5">
       <WeeklyProgress />
       <TodayChecklist />
     </div>
 
-    <!-- 5. Goal Progress -->
-    <GoalProgress />
+    <!-- 6. Macro Tracker -->
+    <MacroTracker v-if="goalsStore.hasTracker('protein') || goalsStore.hasTracker('calories') || goalsStore.destinationGoals.length === 0" />
 
-    <!-- 5. Macro Tracker -->
-    <MacroTracker />
-
-    <!-- 6. Up Next -->
+    <!-- 7. Up Next -->
     <UpNextCards @open-checkin="openCheckinModal" />
 
-    <!-- 8. Insights Carousel -->
+    <!-- 8. Insights -->
     <InsightsCarousel :total-cards="1">
       <BodyCompositionCard />
     </InsightsCarousel>
@@ -137,6 +137,13 @@
         </div>
       </div>
     </div>
+
+    <!-- Goal Creation Flow -->
+    <GoalCreationFlow
+      v-if="showGoalCreation"
+      @close="showGoalCreation = false"
+      @created="showGoalCreation = false"
+    />
   </div>
 </template>
 
@@ -155,7 +162,8 @@ import { useBodyStore } from '@/stores/body'
 import BriefMeButton from '@/components/dashboard/BriefMeButton.vue'
 import WeeklyProgress from '@/components/dashboard/WeeklyProgress.vue'
 import TodayChecklist from '@/components/dashboard/TodayChecklist.vue'
-import GoalProgress from '@/components/dashboard/GoalProgress.vue'
+import DestinationStrip from '@/components/dashboard/DestinationStrip.vue'
+import GoalCreationFlow from '@/components/goals/GoalCreationFlow.vue'
 import UpNextCards from '@/components/dashboard/UpNextCards.vue'
 import AvatarCompanion from '@/components/dashboard/AvatarCompanion.vue'
 import MacroTracker from '@/components/dashboard/MacroTracker.vue'
@@ -169,6 +177,7 @@ const goalsStore = useGoalsStore()
 const calendarStore = useCalendarStore()
 const supplementStore = useSupplementStore()
 const bodyStore = useBodyStore()
+const showGoalCreation = ref(false)
 
 const greeting = computed(() => getGreeting())
 const formattedDate = computed(() => formatDate())

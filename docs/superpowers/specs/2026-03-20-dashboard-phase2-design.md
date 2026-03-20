@@ -114,19 +114,23 @@ The confidence level can be shown to the user as a subtle indicator (e.g., "~" p
 
 ### Data model changes
 
+**Existing columns:** The `v2_meals` table already has `calories` and `protein_g` columns used by `MealSlot.vue` for manual entry. Rather than adding parallel `_est` columns, we reuse the existing columns for AI estimates too. The `description` and `confidence` columns are new.
+
+**Merge strategy:** The `calories` and `protein_g` columns hold the final values regardless of source (manual or AI-estimated). When AI estimates, the values go into these same columns. The `confidence` column indicates the data source: `null` = manually entered, `'high'`/`'medium'`/`'low'` = AI-estimated. This way `dailyProtein` and `dailyCalories` computeds simply sum the existing columns and capture all meals.
+
 **Modify `v2_meals` table:**
 ```sql
 ALTER TABLE v2_meals ADD COLUMN description text;
-ALTER TABLE v2_meals ADD COLUMN calories_est integer;
-ALTER TABLE v2_meals ADD COLUMN protein_est integer;
-ALTER TABLE v2_meals ADD COLUMN confidence text DEFAULT 'medium';
+ALTER TABLE v2_meals ADD COLUMN confidence text;  -- null = manual, 'high'/'medium'/'low' = AI-estimated
 ```
 
-**Modify `v2_recipes` table:**
+**Modify `v2_recipes` table (for saved meals with macros):**
 ```sql
 ALTER TABLE v2_recipes ADD COLUMN calories_est integer;
 ALTER TABLE v2_recipes ADD COLUMN protein_est integer;
 ```
+
+Note: `v2_recipes` gets `_est` columns because recipes store reference values that auto-fill when reused. The actual logged values go into `v2_meals.calories` and `v2_meals.protein_g`.
 
 **Targets in `v2_profiles.preferences` (JSONB):**
 Add keys:
@@ -134,14 +138,14 @@ Add keys:
 - `daily_calorie_target` (integer, kcal, default 2200)
 
 ### Store changes: mealsStore (modify)
-- Add `dailyProtein` computed: sum of `protein_est` from today's meals
-- Add `dailyCalories` computed: sum of `calories_est` from today's meals
+- Add `dailyProtein` computed: sum of `protein_g` from `todaysMeals` (uses existing column, captures both manual and AI-estimated)
+- Add `dailyCalories` computed: sum of `calories` from `todaysMeals` (same — uses existing column)
 - Add `proteinTarget` computed: from `userStore.preferences.daily_protein_target || 150`
 - Add `calorieTarget` computed: from `userStore.preferences.daily_calorie_target || 2200`
-- Add `savedMealsWithMacros` computed: recipes that have calories_est/protein_est populated
-- Update `logMeal()` to accept description, calories_est, protein_est, confidence
-- Add `estimateMacros(description)`: calls ai-assistant, returns { calories, protein, confidence }
-- Add `saveAsMeal(mealData)`: upsert to v2_recipes with macro data
+- Add `savedMealsWithMacros` computed: recipes that have `calories_est`/`protein_est` populated
+- Update `logMeal()`: when AI-estimated, pass `calories`, `protein_g`, `description`, `confidence`. The existing `MealSlot.vue` manual flow continues to work unchanged — it already passes `calories` and `protein_g`.
+- Add `estimateMacros(description)`: standalone call to `supabase.functions.invoke('ai-assistant', ...)` — does NOT use `aiStore` or the chat panel. This is a headless AI call that returns `{ calories, protein, confidence }` without affecting the AI conversation.
+- Add `saveAsMeal(mealData)`: upsert to v2_recipes with `calories_est`, `protein_est`, name, and description
 
 ---
 
@@ -163,16 +167,23 @@ Add keys:
 
 ### Store changes: userStore (modify)
 - Add `waterGoal` computed: `preferences.daily_water_goal || 8`
-- Add `weeklyWater` state: fetched during hydrate() — sum of water_glasses for this week from v2_daily_logs
+- Add `weeklyWater` ref: integer, fetched during `hydrate()` via a separate query (the existing hydrate fetches a single daily log row via `.maybeSingle()`, so weekly water needs its own query):
+  ```javascript
+  const weekStart = getMondayWeekStart()
+  const { data: waterData } = await supabase
+    .from('v2_daily_logs')
+    .select('water_glasses')
+    .eq('user_id', user.id)
+    .gte('date', weekStart)
+  weeklyWater.value = (waterData || []).reduce((sum, d) => sum + (d.water_glasses || 0), 0)
+  ```
+
+### Component changes for configurable water goal
+- **TodayChecklist.vue:** Replace hardcoded `8` on line 84 (`"/8 glasses"`) with `userStore.waterGoal`. The hydration status computed should also use `userStore.waterGoal` instead of hardcoded `8`.
+- **UpNextCards.vue:** Replace `const waterGoal = 8` with `const waterGoal = userStore.waterGoal`
 
 ### Data model changes
 No new tables. Add `daily_water_goal` to preferences JSONB in v2_profiles (application-level, no migration needed).
-
-For weekly water total, query `v2_daily_logs` during hydrate:
-```sql
-SELECT SUM(water_glasses) FROM v2_daily_logs
-WHERE user_id = ? AND date >= monday_of_this_week
-```
 
 ---
 
@@ -344,11 +355,9 @@ CREATE TABLE v2_body_logs (
 ALTER TABLE v2_body_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users manage own body logs" ON v2_body_logs FOR ALL USING (auth.uid() = user_id);
 
--- Macro tracking on meals
+-- Macro tracking on meals (reuse existing calories/protein_g columns for values)
 ALTER TABLE v2_meals ADD COLUMN description text;
-ALTER TABLE v2_meals ADD COLUMN calories_est integer;
-ALTER TABLE v2_meals ADD COLUMN protein_est integer;
-ALTER TABLE v2_meals ADD COLUMN confidence text DEFAULT 'medium';
+ALTER TABLE v2_meals ADD COLUMN confidence text;  -- null = manual, 'high'/'medium'/'low' = AI-estimated
 
 -- Macro data on saved recipes
 ALTER TABLE v2_recipes ADD COLUMN calories_est integer;
@@ -364,3 +373,33 @@ Add a "Health Tracking" section to SettingsView.vue:
 - **Supplements:** list with add/remove/reorder. Each item has name + frequency selector (daily or specific days)
 
 All stored in `v2_profiles.preferences` JSONB except supplements which have their own table.
+
+## Empty States and Edge Cases
+
+### Supplement checklist
+- **No supplements configured:** Supplement card does NOT appear in Up Next. Supplement status dot does NOT appear in Today panel. User can add supplements via Settings.
+- **All supplements taken:** Card stays visible but muted with "All supplements taken" and checkmark.
+- **Many supplements (10+):** Card body has a max-height of ~200px with overflow-y scroll. This prevents the card from dominating the dashboard.
+
+### Macro tracker
+- **No meals logged today:** Shows "0 / {target}" with empty progress bars. Not hidden.
+- **Meal logged without description:** `calories` and `protein_g` may be null if user skipped manual entry and didn't use AI. These meals contribute 0 to the daily totals.
+- **AI estimation fails:** Show error inline in the meal logging form. User can still save the meal without macros.
+
+### Body composition
+- **No entries:** Card shows "Log your first weigh-in" CTA button. No weight or photo displayed.
+- **Only one entry:** Shows weight but no "change since last" comparison.
+- **No photos:** Weight still displays. Photo thumbnail area shows a placeholder or is hidden.
+
+### Water
+- **First day of week (Monday):** Weekly total starts at 0/{dailyGoal}. This is correct.
+- **Water goal changed mid-week:** Weekly goal recalculates using the new daily goal × days elapsed. Previous days' logs are not retroactively adjusted.
+
+## Privacy: Progress Photos Storage
+
+Use **signed URLs** for progress photos, not a public bucket. Body photos are sensitive content.
+
+- Supabase Storage bucket `progress-photos`: private (not public)
+- Upload path: `{user_id}/{timestamp}-{front|side}.jpg`
+- When displaying photos, generate short-lived signed URLs (e.g., 1 hour expiry) via `supabase.storage.from('progress-photos').createSignedUrl(path, 3600)`
+- RLS on Storage: users can only access files in their own `{user_id}/` prefix

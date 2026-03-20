@@ -6,52 +6,20 @@
       <div class="flex items-center justify-between">
         <h1 class="text-2xl font-bold text-slate-100">Goals</h1>
         <button
-          class="rounded-lg p-2 transition-colors"
-          :class="showNewGoalForm ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'"
+          class="rounded-lg p-2 bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors"
           aria-label="Add goal"
-          @click="showNewGoalForm = !showNewGoalForm"
+          @click="showCreationFlow = true"
         >
           <Plus :size="20" />
         </button>
       </div>
 
-      <!-- New goal form -->
-      <div v-if="showNewGoalForm" class="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
-        <h2 class="text-sm font-semibold text-slate-200">New Goal</h2>
-        <input
-          v-model="newGoal.title"
-          type="text"
-          placeholder="Goal title"
-          class="w-full rounded-lg bg-slate-800 px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:ring-2 focus:ring-brand-600"
-        />
-        <textarea
-          v-model="newGoal.description"
-          placeholder="Description (optional)"
-          rows="2"
-          class="w-full rounded-lg bg-slate-800 px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none focus:ring-2 focus:ring-brand-600 resize-none"
-        />
-        <input
-          v-model="newGoal.targetDate"
-          type="date"
-          class="w-full rounded-lg bg-slate-800 px-4 py-2.5 text-sm text-slate-400 outline-none focus:ring-2 focus:ring-brand-600"
-        />
-        <div class="flex gap-2 pt-1">
-          <button
-            :disabled="creating || !newGoal.title.trim()"
-            class="flex-1 rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            @click="createGoal"
-          >
-            {{ creating ? 'Creating...' : 'Create Goal' }}
-          </button>
-          <button
-            class="rounded-lg bg-slate-800 px-4 py-2.5 text-sm text-slate-400 hover:bg-slate-700 transition-colors"
-            @click="cancelNewGoal"
-          >
-            Cancel
-          </button>
-        </div>
-        <p v-if="createError" class="text-xs text-red-400">{{ createError }}</p>
-      </div>
+      <!-- Goal creation flow modal -->
+      <GoalCreationFlow
+        v-if="showCreationFlow"
+        @close="showCreationFlow = false"
+        @created="showCreationFlow = false"
+      />
 
       <!-- Loading -->
       <LoadingSpinner v-if="goalsStore.loading" />
@@ -63,16 +31,39 @@
         description="Create your first goal to start tracking your progress."
       />
 
-      <!-- Goal cards -->
-      <div v-else class="space-y-4">
-        <GoalCard
-          v-for="goal in goalsStore.goals"
-          :key="goal.id"
-          :goal="goal"
-          :expanded="expandedGoalId === goal.id"
-          @add-kr="openKrForm"
-          @toggle-focus="toggleGoalFocus"
-        />
+      <!-- Goal cards grouped by category -->
+      <div v-else class="space-y-6">
+        <!-- Categorized active goals -->
+        <div v-for="cat in goalCategories" :key="cat.key">
+          <div v-if="categorizedGoals[cat.key].length > 0">
+            <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">{{ cat.label }}</h2>
+            <div class="space-y-4">
+              <GoalCard
+                v-for="goal in categorizedGoals[cat.key]"
+                :key="goal.id"
+                :goal="goal"
+                :expanded="expandedGoalId === goal.id"
+                @add-kr="openKrForm"
+                @toggle-focus="toggleGoalFocus"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Uncategorized / legacy goals -->
+        <div v-if="uncategorizedGoals.length > 0">
+          <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Other</h2>
+          <div class="space-y-4">
+            <GoalCard
+              v-for="goal in uncategorizedGoals"
+              :key="goal.id"
+              :goal="goal"
+              :expanded="expandedGoalId === goal.id"
+              @add-kr="openKrForm"
+              @toggle-focus="toggleGoalFocus"
+            />
+          </div>
+        </div>
       </div>
 
       <!-- Key result add form (inline, anchored to active goal) -->
@@ -130,12 +121,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Plus } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
-import { Star } from 'lucide-vue-next'
 import { useGoalsStore } from '@/stores/goals'
 import GoalCard from '@/components/goals/GoalCard.vue'
+import GoalCreationFlow from '@/components/goals/GoalCreationFlow.vue'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import EmptyState from '@/components/shared/EmptyState.vue'
 
@@ -144,11 +135,25 @@ const goalsStore = useGoalsStore()
 const route = useRoute()
 const expandedGoalId = ref(route.query.expand || null)
 
-// New goal form state
-const showNewGoalForm = ref(false)
-const creating = ref(false)
-const createError = ref('')
-const newGoal = ref({ title: '', description: '', targetDate: '' })
+// Creation flow state
+const showCreationFlow = ref(false)
+
+// Category grouping
+const goalCategories = [
+  { key: 'body', label: 'Body' },
+  { key: 'nutrition', label: 'Nutrition' },
+  { key: 'performance', label: 'Performance' }
+]
+
+const categorizedGoals = computed(() => ({
+  body: goalsStore.goals.filter(g => g.category === 'body'),
+  nutrition: goalsStore.goals.filter(g => g.category === 'nutrition'),
+  performance: goalsStore.goals.filter(g => g.category === 'performance')
+}))
+
+const uncategorizedGoals = computed(() =>
+  goalsStore.goals.filter(g => !g.category)
+)
 
 // Key result form state
 const activeKrGoalId = ref(null)
@@ -159,31 +164,6 @@ const newKr = ref({ title: '', targetValue: null, unit: '', deadline: '' })
 onMounted(() => {
   goalsStore.hydrate()
 })
-
-function cancelNewGoal() {
-  showNewGoalForm.value = false
-  newGoal.value = { title: '', description: '', targetDate: '' }
-  createError.value = ''
-}
-
-async function createGoal() {
-  if (!newGoal.value.title.trim()) return
-  creating.value = true
-  createError.value = ''
-  try {
-    await goalsStore.createGoal(
-      newGoal.value.title.trim(),
-      newGoal.value.description.trim(),
-      newGoal.value.targetDate || null,
-    )
-    cancelNewGoal()
-  } catch (err) {
-    createError.value = 'Failed to create goal. Please try again.'
-    console.error(err)
-  } finally {
-    creating.value = false
-  }
-}
 
 function toggleGoalFocus(goalId) {
   goalsStore.toggleFocus(goalId)

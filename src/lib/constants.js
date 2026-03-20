@@ -42,3 +42,11 @@ export function getWeekStart(date = new Date()) {
   const dd = String(d.getDate()).padStart(2, '0')
   return `${yyyy}-${mm}-${dd}`
 }
+
+export function getMondayWeekStart(date) {
+  const d = date ? new Date(date) : new Date()
+  const day = d.getDay()
+  const diff = day === 0 ? 6 : day - 1
+  d.setDate(d.getDate() - diff)
+  return d.toISOString().split('T')[0]
+}

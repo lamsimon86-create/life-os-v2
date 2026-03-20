@@ -161,6 +161,71 @@ export const useMealsStore = defineStore('meals', () => {
     return null
   })
 
+  const dailyProtein = computed(() => {
+    return (todaysMeals.value || []).reduce((sum, m) => sum + (m.protein_g || 0), 0)
+  })
+
+  const dailyCalories = computed(() => {
+    return (todaysMeals.value || []).reduce((sum, m) => sum + (m.calories || 0), 0)
+  })
+
+  const proteinTarget = computed(() => {
+    const userStore = useUserStore()
+    return userStore.preferences?.daily_protein_target || 150
+  })
+
+  const calorieTarget = computed(() => {
+    const userStore = useUserStore()
+    return userStore.preferences?.daily_calorie_target || 2200
+  })
+
+  const savedMealsWithMacros = computed(() => {
+    return recipes.value.filter(r => r.calories_est || r.protein_est)
+  })
+
+  async function estimateMacros(description) {
+    const { data, error } = await supabase.functions.invoke('ai-assistant', {
+      body: {
+        message: `Estimate the calories and protein (in grams) for this meal: "${description}"\n\nRespond with JSON only: { "calories": number, "protein": number, "confidence": "high" | "medium" | "low" }\n\nBase estimates on typical serving sizes. If the description is vague, use medium portions.`,
+        context: { page: 'meals', task: 'macro_estimation' },
+        conversationHistory: [],
+        difficulty: 'medium'
+      }
+    })
+
+    if (error) throw error
+
+    // Parse JSON from AI response
+    try {
+      const match = data.message.match(/\{[\s\S]*\}/)
+      if (match) return JSON.parse(match[0])
+    } catch {}
+
+    return { calories: 0, protein: 0, confidence: 'low' }
+  }
+
+  async function saveAsMeal(mealData) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data } = await supabase
+      .from('v2_recipes')
+      .insert({
+        user_id: user.id,
+        name: mealData.name,
+        description: mealData.description || '',
+        calories_est: mealData.calories,
+        protein_est: mealData.protein,
+        source: 'user',
+        liked: true
+      })
+      .select()
+      .single()
+
+    if (data) recipes.value.unshift(data)
+    return data
+  }
+
   function generatePlan() {
     openAiPanel.value = true
   }
@@ -186,5 +251,12 @@ export const useMealsStore = defineStore('meals', () => {
     deleteRecipe,
     weeklyMealProgress,
     nextMealToLog,
+    dailyProtein,
+    dailyCalories,
+    proteinTarget,
+    calorieTarget,
+    savedMealsWithMacros,
+    estimateMacros,
+    saveAsMeal,
   }
 })

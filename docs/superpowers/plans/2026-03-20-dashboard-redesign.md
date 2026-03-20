@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-03-20-dashboard-redesign-design.md`
 
-**Supabase CLI:** All Supabase commands must be prefixed with `SUPABASE_ACCESS_TOKEN=sbp_abf2b370173e54d511095caa8ef525fd6458e594` since the Life OS project is in a separate org from the default CLI profile.
+**Supabase CLI:** All Supabase commands must be prefixed with `SUPABASE_ACCESS_TOKEN=<token from .claude/settings.local.json>` since the Life OS project is in a separate org from the default CLI profile.
 
 **Week boundaries:** The spec uses Monday-Sunday weeks. The existing `getWeekStart()` in `src/lib/constants.js` returns Sunday. Add a new `getMondayWeekStart()` helper for dashboard computeds. Do NOT modify `getWeekStart()` as other features depend on it.
 

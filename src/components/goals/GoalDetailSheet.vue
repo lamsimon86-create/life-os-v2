@@ -42,11 +42,11 @@
 
       <!-- Prescribed Trackers -->
       <div v-if="goalTrackers.length" class="mb-4">
-        <div class="text-xs text-slate-500 uppercase tracking-wider mb-2">Daily Targets</div>
+        <div class="text-xs text-slate-500 uppercase tracking-wider mb-2">Targets</div>
         <div class="flex flex-col gap-1.5">
           <div v-for="t in goalTrackers" :key="t.id" class="flex justify-between text-sm bg-slate-750 rounded-lg px-3 py-2">
             <span>{{ trackerLabel(t) }}</span>
-            <span class="text-slate-400">{{ t.daily_target }} {{ t.unit }}</span>
+            <span class="text-slate-400">{{ trackerDisplay(t) }}</span>
           </div>
         </div>
       </div>
@@ -90,9 +90,15 @@ function krProgress(kr) {
   return Math.min(100, Math.round((kr.current_value / kr.target_value) * 100))
 }
 
+function trackerDisplay(t) {
+  if (t.tracker_type === 'body_weight') return `${t.daily_target}/month`
+  if (t.tracker_type === 'workout_frequency') return `${t.daily_target}/week`
+  return `${t.daily_target} ${t.unit}`
+}
+
 function trackerLabel(t) {
   if (t.tracker_type === 'supplement') return t.supplement_name
-  const labels = { protein: 'Protein', calories: 'Calories', water: 'Water', workout_frequency: 'Workouts/week', body_weight: 'Monthly weigh-in' }
+  const labels = { protein: 'Protein', calories: 'Calories', water: 'Water', workout_frequency: 'Workouts', body_weight: 'Weigh-in' }
   return labels[t.tracker_type] || t.tracker_type
 }
 </script>

@@ -80,7 +80,7 @@
 
         <!-- Prescribed Trackers -->
         <div v-if="refined.prescribed_trackers?.length" class="mb-4">
-          <div class="text-xs text-slate-500 uppercase tracking-wider mb-2">Daily Tracking Plan</div>
+          <div class="text-xs text-slate-500 uppercase tracking-wider mb-2">Tracking Plan</div>
           <div class="flex flex-col gap-1.5">
             <div v-for="(t, i) in refined.prescribed_trackers" :key="i" class="bg-slate-700 rounded-lg px-3 py-2 flex justify-between items-start">
               <div>

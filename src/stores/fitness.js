@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 import { supabase } from '@/lib/supabase'
 import { calcWorkoutXp } from '@/lib/gamification'
-import { getDayOfWeek, getWeekStart } from '@/lib/constants'
+import { getDayOfWeek, getWeekStart, getMondayWeekStart } from '@/lib/constants'
 
 export const useFitnessStore = defineStore('fitness', () => {
   const activeProgram = ref(null)
@@ -14,6 +14,44 @@ export const useFitnessStore = defineStore('fitness', () => {
   const weeklyVolume = ref(0)
   const workoutStreak = ref(0)
   const loading = ref(false)
+  const previousWeekVolume = ref(0)
+
+  const weeklyWorkoutCount = computed(() => {
+    if (!activeProgram.value) return { completed: 0, planned: 0 }
+    const planned = activeProgram.value.days
+      ? activeProgram.value.days.filter(d => !d.is_rest_day).length
+      : 0
+    const weekStart = getMondayWeekStart()
+    const completed = recentLogs.value.filter(log => {
+      if (!log.finished_at) return false
+      const logDate = log.started_at.split('T')[0]
+      return logDate >= weekStart
+    }).length
+    return { completed, planned }
+  })
+
+  const lastCompletedWorkout = computed(() => {
+    const completed = recentLogs.value.find(log => log.finished_at)
+    if (!completed) return null
+    const day = activeProgram.value?.days?.find(d => d.id === completed.program_day_id)
+    return {
+      name: day?.name || 'Workout',
+      focus: day?.focus || '',
+      duration: completed.duration_min || 0,
+      xp: completed.xp_earned || 0
+    }
+  })
+
+  const volumeTrend = computed(() => {
+    if (previousWeekVolume.value === 0) {
+      return { percentage: 0, direction: 'flat' }
+    }
+    const change = ((weeklyVolume.value - previousWeekVolume.value) / previousWeekVolume.value) * 100
+    return {
+      percentage: Math.abs(Math.round(change)),
+      direction: change > 0 ? 'up' : change < 0 ? 'down' : 'flat'
+    }
+  })
 
   async function hydrate() {
     const auth = useAuthStore()
@@ -81,6 +119,31 @@ export const useFitnessStore = defineStore('fitness', () => {
         (sum, s) => sum + (s.weight || 0) * (s.reps || 0),
         0
       )
+
+      // 4b. Fetch previous week volume for trend comparison
+      const prevWeekStart = getMondayWeekStart(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+      const prevWeekEnd = getMondayWeekStart()
+      const { data: prevLogs } = await supabase
+        .from('v2_workout_logs')
+        .select('id')
+        .eq('user_id', auth.userId)
+        .gte('started_at', prevWeekStart)
+        .lt('started_at', prevWeekEnd)
+
+      const prevLogIds = (prevLogs || []).map(l => l.id)
+      if (prevLogIds.length > 0) {
+        const { data: prevSets } = await supabase
+          .from('v2_workout_sets')
+          .select('weight, reps')
+          .in('workout_log_id', prevLogIds)
+          .eq('is_warmup', false)
+
+        previousWeekVolume.value = (prevSets || []).reduce(
+          (sum, s) => sum + (s.weight || 0) * (s.reps || 0), 0
+        )
+      } else {
+        previousWeekVolume.value = 0
+      }
 
       // 5. Calculate streak from recent logs (consecutive days with workouts)
       calculateStreak(logData || [])
@@ -401,6 +464,10 @@ export const useFitnessStore = defineStore('fitness', () => {
     weeklyVolume,
     workoutStreak,
     loading,
+    previousWeekVolume,
+    weeklyWorkoutCount,
+    lastCompletedWorkout,
+    volumeTrend,
     hydrate,
     startWorkout,
     logSet,

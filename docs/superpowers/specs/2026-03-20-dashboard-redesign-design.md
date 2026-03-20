@@ -104,6 +104,12 @@ Checklist-style items with status indicator dots:
    - Data: `userStore.energy`, `userStore.sleepQuality`, `userStore.sleepHours` — check-in is considered done when `energy` is not null for today's date
    - Note: `userStore` does NOT have a `dailyLog` property. The individual refs (`energy`, `sleepQuality`, `sleepHours`) are populated by `hydrate()` from the `v2_daily_logs` table.
 
+6. **Hydration** — "Water"
+   - Subtext: "{count}/8 glasses" (or user-configured goal)
+   - Status: green filled (goal met), amber (in progress, >0), grey (0 logged)
+   - Data: `userStore.waterGlasses` — integer from `v2_daily_logs.water_glasses` column
+   - Always visible (not gated by check-in status)
+
 ### 5. Goal Progress Section
 
 Displays focused goals with progress bars and key result snapshots.
@@ -162,6 +168,14 @@ Smart, context-aware action cards with direct action buttons. Cards appear/disap
    - Subtitle: "How's your energy? How'd you sleep?"
    - Button: "Log" (grey, opens inline quick form or navigates to a modal)
    - When done: card disappears
+
+4. **Hydration card** (border: cyan/sky)
+   - Always visible (persistent throughout the day)
+   - Title: "Water — {count}/8 glasses"
+   - Subtitle: "{remaining} more to hit your goal" or "Goal reached!"
+   - Button: "+1" (sky blue, inline action — does NOT navigate, just increments counter)
+   - Tapping "+1" immediately increments `userStore.waterGlasses` and upserts to `v2_daily_logs`
+   - When goal met: card stays but button changes to a checkmark, title shows "Goal reached"
 
 **Ordering logic:**
 - Time-of-day thresholds follow `getGreeting()` boundaries: before 12:00 = morning, 12:00-17:00 = afternoon, after 17:00 = evening
@@ -260,10 +274,12 @@ Add to `userStore`:
 ## Store Changes
 
 ### userStore (modify)
+- Add `waterGlasses` ref: integer, populated from `v2_daily_logs.water_glasses` during `hydrate()`
+- Add `addWater()` action: increments `waterGlasses` by 1 and upserts to `v2_daily_logs`
 - Add `avatarStage` computed: maps `level` to stage 1-5 using thresholds [1-2, 3-4, 5-6, 7-8, 9-11]
 - Add `avatarMood` computed: derives mood from daily activity state (workout done, meals logged, check-in done, streak). Needs access to `fitnessStore` and `mealsStore` — use Pinia's `useStore()` within the computed or accept params.
 - Add `dailyCheckinDone` computed: returns `true` if `energy` is not null (indicates today's log exists)
-- Note: `userStore` does NOT have a `dailyLog` property. Individual refs `energy`, `sleepQuality`, `sleepHours` are populated by `hydrate()`.
+- Note: `userStore` does NOT have a `dailyLog` property. Individual refs `energy`, `sleepQuality`, `sleepHours`, `waterGlasses` are populated by `hydrate()`.
 
 ### goalsStore (modify)
 - Add `focusedGoals` computed
@@ -295,6 +311,9 @@ Add to `userStore`:
 ```sql
 -- Add goal focus column
 ALTER TABLE v2_goals ADD COLUMN is_focused boolean DEFAULT false;
+
+-- Add hydration tracking to daily logs
+ALTER TABLE v2_daily_logs ADD COLUMN water_glasses integer DEFAULT 0;
 
 -- Calendar events table (if not already present)
 CREATE TABLE IF NOT EXISTS v2_calendar_events (

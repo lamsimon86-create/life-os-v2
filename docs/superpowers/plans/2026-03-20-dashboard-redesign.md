@@ -63,6 +63,9 @@
 -- Add goal focus column
 ALTER TABLE v2_goals ADD COLUMN is_focused boolean DEFAULT false;
 
+-- Add hydration tracking to daily logs
+ALTER TABLE v2_daily_logs ADD COLUMN water_glasses integer DEFAULT 0;
+
 -- Calendar events table
 CREATE TABLE IF NOT EXISTS v2_calendar_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -541,6 +544,8 @@ import { getAvatarStage, getAvatarMood, getNextStage } from '@/lib/avatar'
 Add after existing computed properties:
 
 ```javascript
+const waterGlasses = ref(0)
+
 const dailyCheckinDone = computed(() => energy.value !== null)
 
 const avatarStage = computed(() => getAvatarStage(level.value || 1))
@@ -550,12 +555,39 @@ const avatarNextStage = computed(() => getNextStage(level.value || 1))
 
 Note: `avatarMood` requires cross-store data (fitness, meals). It will be computed in `DashboardView.vue` or `AvatarCompanion.vue` using data from all stores, NOT inside `userStore`, to avoid circular store dependencies.
 
-- [ ] **Step 3: Add to return statement**
+- [ ] **Step 3: Add `addWater()` action and populate `waterGlasses` in hydrate**
+
+Add action:
+
+```javascript
+async function addWater() {
+  waterGlasses.value++
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  const today = new Date().toISOString().split('T')[0]
+  await supabase
+    .from('v2_daily_logs')
+    .upsert({
+      user_id: user.id,
+      date: today,
+      water_glasses: waterGlasses.value
+    }, { onConflict: 'user_id,date' })
+}
+```
+
+In the existing `hydrate()` function, where it fetches the daily log, also populate `waterGlasses`:
+
+```javascript
+// After fetching daily log data:
+waterGlasses.value = logData?.water_glasses || 0
+```
+
+- [ ] **Step 4: Add to return statement**
 
 ```javascript
 return {
   // ... existing returns ...
-  dailyCheckinDone, avatarStage, avatarNextStage
+  waterGlasses, addWater, dailyCheckinDone, avatarStage, avatarNextStage
 }
 ```
 
@@ -1017,6 +1049,20 @@ git commit -m "feat: WeeklyProgress — 3 progress rings with volume trend"
           </div>
         </div>
       </div>
+
+      <!-- Hydration -->
+      <div class="flex items-start gap-2">
+        <div
+          class="w-[18px] h-[18px] rounded-full border-2 shrink-0 mt-0.5 flex items-center justify-center"
+          :class="hydrationStatus.class"
+        >
+          <Check v-if="hydrationStatus.done" class="w-2.5 h-2.5 text-slate-900" />
+        </div>
+        <div>
+          <div class="text-xs font-semibold">Water</div>
+          <div class="text-[10px] text-slate-500">{{ userStore.waterGlasses }}/8 glasses</div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -1109,6 +1155,13 @@ const goalStatus = computed(() => {
     return { subtitle: `${dueCount} key results due`, class: 'border-amber-500' }
   }
   return { subtitle: 'All on track', class: 'border-green-500' }
+})
+
+const hydrationStatus = computed(() => {
+  const glasses = userStore.waterGlasses || 0
+  if (glasses >= 8) return { class: 'border-green-500 bg-green-500', done: true }
+  if (glasses > 0) return { class: 'border-amber-500', done: false }
+  return { class: 'border-slate-500', done: false }
 })
 
 const scheduleSubtitle = computed(() => {
@@ -1365,6 +1418,31 @@ const cards = computed(() => {
         class: 'bg-blue-500 text-white',
         handler: () => router.push('/meals')
       }
+    })
+  }
+
+  // Hydration card (always visible)
+  const glasses = userStore.waterGlasses || 0
+  const waterGoal = 8
+  if (glasses < waterGoal) {
+    incomplete.push({
+      key: 'water',
+      title: `Water — ${glasses}/${waterGoal} glasses`,
+      subtitle: `${waterGoal - glasses} more to hit your goal`,
+      borderClass: 'border-sky-400',
+      action: {
+        label: '+1',
+        class: 'bg-sky-400 text-slate-900',
+        handler: () => userStore.addWater()
+      }
+    })
+  } else {
+    completed.push({
+      key: 'water-done',
+      title: `Water — ${glasses}/${waterGoal} glasses`,
+      subtitle: 'Goal reached!',
+      borderClass: 'border-sky-400/50',
+      muted: true
     })
   }
 

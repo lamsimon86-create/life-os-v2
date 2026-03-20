@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/lib/supabase'
 import { getLevelForXp, getXpProgress } from '@/lib/gamification'
 import { getAvatarStage, getNextStage } from '@/lib/avatar'
+import { getMondayWeekStart } from '@/lib/constants'
 
 export const useUserStore = defineStore('user', () => {
   const profile = ref(null)
@@ -12,6 +13,7 @@ export const useUserStore = defineStore('user', () => {
   const sleepHours = ref(null)
   const loading = ref(false)
   const waterGlasses = ref(0)
+  const weeklyWater = ref(0)
 
   const name = computed(() => profile.value?.name || '')
   const xp = computed(() => profile.value?.xp || 0)
@@ -23,6 +25,10 @@ export const useUserStore = defineStore('user', () => {
   const levelInfo = computed(() => getLevelForXp(xp.value))
   const xpProgress = computed(() => getXpProgress(xp.value))
   const dailyCheckinDone = computed(() => energy.value !== null)
+  const waterGoal = computed(() => {
+    const prefs = profile.value?.preferences
+    return prefs?.daily_water_goal || 8
+  })
   const avatarStage = computed(() => getAvatarStage(level.value || 1))
   const avatarNextStage = computed(() => getNextStage(level.value || 1))
 
@@ -55,6 +61,16 @@ export const useUserStore = defineStore('user', () => {
         sleepHours.value = logData.sleep_hours
         waterGlasses.value = logData?.water_glasses || 0
       }
+
+      // Fetch weekly water total
+      const weekStart = getMondayWeekStart()
+      const { data: waterData } = await supabase
+        .from('v2_daily_logs')
+        .select('water_glasses')
+        .eq('user_id', auth.userId)
+        .gte('date', weekStart)
+
+      weeklyWater.value = (waterData || []).reduce((sum, d) => sum + (d.water_glasses || 0), 0)
     } finally {
       loading.value = false
     }
@@ -102,6 +118,7 @@ export const useUserStore = defineStore('user', () => {
 
   async function addWater() {
     waterGlasses.value++
+    weeklyWater.value++
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     const today = new Date().toISOString().split('T')[0]
@@ -121,6 +138,7 @@ export const useUserStore = defineStore('user', () => {
     sleepHours,
     loading,
     waterGlasses,
+    weeklyWater,
     name,
     xp,
     level,
@@ -131,6 +149,7 @@ export const useUserStore = defineStore('user', () => {
     levelInfo,
     xpProgress,
     dailyCheckinDone,
+    waterGoal,
     avatarStage,
     avatarNextStage,
     hydrate,

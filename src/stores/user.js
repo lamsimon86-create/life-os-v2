@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { supabase } from '@/lib/supabase'
 import { getLevelForXp, getXpProgress } from '@/lib/gamification'
+import { getAvatarStage, getNextStage } from '@/lib/avatar'
 
 export const useUserStore = defineStore('user', () => {
   const profile = ref(null)
@@ -10,6 +11,7 @@ export const useUserStore = defineStore('user', () => {
   const sleepQuality = ref(null)
   const sleepHours = ref(null)
   const loading = ref(false)
+  const waterGlasses = ref(0)
 
   const name = computed(() => profile.value?.name || '')
   const xp = computed(() => profile.value?.xp || 0)
@@ -20,6 +22,9 @@ export const useUserStore = defineStore('user', () => {
   const onboardingComplete = computed(() => profile.value?.onboarding_complete || false)
   const levelInfo = computed(() => getLevelForXp(xp.value))
   const xpProgress = computed(() => getXpProgress(xp.value))
+  const dailyCheckinDone = computed(() => energy.value !== null)
+  const avatarStage = computed(() => getAvatarStage(level.value || 1))
+  const avatarNextStage = computed(() => getNextStage(level.value || 1))
 
   async function hydrate() {
     const auth = useAuthStore()
@@ -48,6 +53,7 @@ export const useUserStore = defineStore('user', () => {
         energy.value = logData.energy
         sleepQuality.value = logData.sleep_quality
         sleepHours.value = logData.sleep_hours
+        waterGlasses.value = logData?.water_glasses || 0
       }
     } finally {
       loading.value = false
@@ -94,12 +100,27 @@ export const useUserStore = defineStore('user', () => {
     if (data.sleep_hours !== undefined) sleepHours.value = data.sleep_hours
   }
 
+  async function addWater() {
+    waterGlasses.value++
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const today = new Date().toISOString().split('T')[0]
+    await supabase
+      .from('v2_daily_logs')
+      .upsert({
+        user_id: user.id,
+        date: today,
+        water_glasses: waterGlasses.value
+      }, { onConflict: 'user_id,date' })
+  }
+
   return {
     profile,
     energy,
     sleepQuality,
     sleepHours,
     loading,
+    waterGlasses,
     name,
     xp,
     level,
@@ -109,9 +130,13 @@ export const useUserStore = defineStore('user', () => {
     onboardingComplete,
     levelInfo,
     xpProgress,
+    dailyCheckinDone,
+    avatarStage,
+    avatarNextStage,
     hydrate,
     updateProfile,
     addXp,
     logDailyState,
+    addWater,
   }
 })

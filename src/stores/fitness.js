@@ -15,6 +15,9 @@ export const useFitnessStore = defineStore('fitness', () => {
   const workoutStreak = ref(0)
   const loading = ref(false)
   const previousWeekVolume = ref(0)
+  const exerciseLibrary = ref([])
+  const archivedPrograms = ref([])
+  const personalRecords = ref([])
 
   const weeklyWorkoutCount = computed(() => {
     if (!activeProgram.value) return { completed: 0, planned: 0 }
@@ -159,43 +162,59 @@ export const useFitnessStore = defineStore('fitness', () => {
         .maybeSingle()
 
       activeSession.value = activeData || null
+
+      if (exerciseLibrary.value.length === 0) {
+        await fetchExerciseLibrary()
+      }
     } finally {
       loading.value = false
     }
   }
 
   function calculateStreak(logs) {
-    if (!logs.length) {
+    if (!logs || logs.length === 0) {
       workoutStreak.value = 0
       return
     }
 
-    let streak = 0
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    // Get unique workout dates
-    const workoutDates = new Set()
-    for (const log of logs) {
-      if (log.finished_at) {
-        const d = new Date(log.started_at)
-        d.setHours(0, 0, 0, 0)
-        workoutDates.add(d.getTime())
+    const restDays = new Set()
+    if (activeProgram.value?.days) {
+      for (const day of activeProgram.value.days) {
+        if (day.is_rest_day) restDays.add(day.day_of_week)
       }
     }
 
-    // Count consecutive days going backwards from today (or yesterday)
+    const logDates = new Set(
+      logs
+        .filter(l => l.finished_at)
+        .map(l => l.started_at.split('T')[0])
+    )
+
+    let streak = 0
+    const today = new Date()
+    const todayStr = today.toISOString().split('T')[0]
+
     let checkDate = new Date(today)
-    // If no workout today, start from yesterday
-    if (!workoutDates.has(checkDate.getTime())) {
+    if (!logDates.has(todayStr)) {
       checkDate.setDate(checkDate.getDate() - 1)
     }
 
-    while (workoutDates.has(checkDate.getTime())) {
-      streak++
-      checkDate.setDate(checkDate.getDate() - 1)
-    }
+    for (let i = 0; i < 365; i++) {
+      const dateStr = checkDate.toISOString().split('T')[0]
+      const dayOfWeek = checkDate.getDay()
 
+      if (restDays.has(dayOfWeek)) {
+        checkDate.setDate(checkDate.getDate() - 1)
+        continue
+      }
+
+      if (logDates.has(dateStr)) {
+        streak++
+        checkDate.setDate(checkDate.getDate() - 1)
+      } else {
+        break
+      }
+    }
     workoutStreak.value = streak
   }
 
@@ -221,8 +240,11 @@ export const useFitnessStore = defineStore('fitness', () => {
   async function logSet(setData) {
     const { error } = await supabase
       .from('v2_workout_sets')
-      .insert(setData)
-
+      .insert({
+        ...setData,
+        rpe: setData.rpe || null,
+        substituted_for: setData.substituted_for || null
+      })
     if (error) throw error
   }
 
@@ -456,6 +478,257 @@ export const useFitnessStore = defineStore('fitness', () => {
     todaysWorkout.value = null
   }
 
+  async function fetchExerciseLibrary() {
+    const { data } = await supabase
+      .from('v2_exercise_library')
+      .select('*')
+      .order('muscle_group')
+      .order('name')
+    exerciseLibrary.value = data || []
+  }
+
+  function searchExercises(query, muscleGroup) {
+    let results = exerciseLibrary.value
+    if (muscleGroup && muscleGroup !== 'all') {
+      results = results.filter(e => e.muscle_group === muscleGroup)
+    }
+    if (query) {
+      const q = query.toLowerCase()
+      results = results.filter(e => e.name.toLowerCase().includes(q))
+    }
+    return results
+  }
+
+  async function fetchLastWeightForExercise(exerciseName) {
+    const user = useAuthStore().user
+    const { data } = await supabase
+      .from('v2_workout_sets')
+      .select('weight, reps')
+      .eq('user_id', user.id)
+      .eq('exercise_name', exerciseName)
+      .eq('is_warmup', false)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    return data
+  }
+
+  async function fetchPersonalRecords() {
+    const user = useAuthStore().user
+    const { data } = await supabase
+      .from('v2_workout_sets')
+      .select('exercise_name, weight, reps, created_at')
+      .eq('user_id', user.id)
+      .eq('is_warmup', false)
+      .order('weight', { ascending: false })
+
+    if (!data) { personalRecords.value = []; return }
+
+    const prMap = new Map()
+    for (const set of data) {
+      if (!prMap.has(set.exercise_name) || set.weight > prMap.get(set.exercise_name).weight) {
+        prMap.set(set.exercise_name, {
+          exercise_name: set.exercise_name,
+          weight: set.weight,
+          reps: set.reps,
+          date: set.created_at
+        })
+      }
+    }
+    personalRecords.value = Array.from(prMap.values()).sort((a, b) => b.weight - a.weight)
+  }
+
+  async function fetchWeeklyMuscleVolume() {
+    const user = useAuthStore().user
+    const weekStart = getMondayWeekStart()
+    const { data } = await supabase
+      .from('v2_workout_sets')
+      .select('exercise_name')
+      .eq('user_id', user.id)
+      .eq('is_warmup', false)
+      .gte('created_at', weekStart)
+
+    if (!data || exerciseLibrary.value.length === 0) return {}
+
+    const libMap = new Map()
+    for (const ex of exerciseLibrary.value) {
+      libMap.set(ex.name.toLowerCase(), ex.muscle_group)
+    }
+
+    const volume = {}
+    for (const set of data) {
+      const group = libMap.get(set.exercise_name.toLowerCase())
+      if (group) {
+        volume[group] = (volume[group] || 0) + 1
+      }
+    }
+    return volume
+  }
+
+  async function archiveProgram(programId) {
+    const user = useAuthStore().user
+    await supabase
+      .from('v2_fitness_programs')
+      .update({ is_active: false, archived_at: new Date().toISOString() })
+      .eq('id', programId)
+      .eq('user_id', user.id)
+    activeProgram.value = null
+    todaysWorkout.value = null
+  }
+
+  async function reactivateProgram(programId) {
+    const user = useAuthStore().user
+    if (activeProgram.value) {
+      await archiveProgram(activeProgram.value.id)
+    }
+    await supabase
+      .from('v2_fitness_programs')
+      .update({ is_active: true, archived_at: null })
+      .eq('id', programId)
+      .eq('user_id', user.id)
+    await hydrate()
+  }
+
+  async function fetchArchivedPrograms() {
+    const user = useAuthStore().user
+    const { data } = await supabase
+      .from('v2_fitness_programs')
+      .select('id, name, source, created_at, archived_at')
+      .eq('user_id', user.id)
+      .not('archived_at', 'is', null)
+      .order('archived_at', { ascending: false })
+    archivedPrograms.value = data || []
+  }
+
+  async function updateProgramDay(dayId, updates) {
+    const user = useAuthStore().user
+    await supabase
+      .from('v2_program_days')
+      .update(updates)
+      .eq('id', dayId)
+      .eq('user_id', user.id)
+    await hydrate()
+  }
+
+  async function addExerciseToDay(dayId, exercise) {
+    const user = useAuthStore().user
+    const { data: existing } = await supabase
+      .from('v2_program_exercises')
+      .select('sort_order')
+      .eq('program_day_id', dayId)
+      .order('sort_order', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const nextOrder = (existing?.sort_order || 0) + 1
+
+    await supabase.from('v2_program_exercises').insert({
+      program_day_id: dayId,
+      user_id: user.id,
+      exercise_name: exercise.name,
+      target_sets: exercise.sets || 3,
+      target_reps_min: exercise.reps_min || 8,
+      target_reps_max: exercise.reps_max || 12,
+      rest_seconds: exercise.rest_seconds || 90,
+      sort_order: nextOrder
+    })
+  }
+
+  async function removeExerciseFromDay(exerciseId) {
+    const user = useAuthStore().user
+    await supabase
+      .from('v2_program_exercises')
+      .delete()
+      .eq('id', exerciseId)
+      .eq('user_id', user.id)
+  }
+
+  async function reorderExercises(dayId, exerciseIds) {
+    const user = useAuthStore().user
+    for (let i = 0; i < exerciseIds.length; i++) {
+      await supabase
+        .from('v2_program_exercises')
+        .update({ sort_order: i })
+        .eq('id', exerciseIds[i])
+        .eq('user_id', user.id)
+    }
+  }
+
+  async function updateExercise(exerciseId, updates) {
+    const user = useAuthStore().user
+    await supabase
+      .from('v2_program_exercises')
+      .update(updates)
+      .eq('id', exerciseId)
+      .eq('user_id', user.id)
+  }
+
+  async function createProgramFromAI(selectedDays, goal, experience, injuries) {
+    const userStore = useUserStore()
+
+    const prompt = `Build a training program for the user:
+
+Available days: ${selectedDays.join(', ')}
+Goal: ${goal}
+Experience: ${experience}
+Injuries/limitations: ${injuries || 'none'}
+Current weight: ${userStore.profile?.weight_kg || 'unknown'} lbs
+
+Respond with JSON only:
+{
+  "name": "Program Name",
+  "days": [
+    {
+      "day_of_week": 0-6,
+      "name": "Day Name",
+      "focus": "Muscle focus",
+      "is_rest_day": false,
+      "exercises": [
+        { "name": "Exercise Name", "sets": 3, "reps_min": 8, "reps_max": 10, "rest_seconds": 90 }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Only schedule training on the available days
+- All other days are rest days
+- Use standard exercise names
+- Weight exercises use lbs
+- Compound movements first, isolation last
+- If injuries are noted, avoid exercises that stress those areas`
+
+    const { data, error } = await supabase.functions.invoke('ai-assistant', {
+      body: {
+        message: prompt,
+        context: { page: 'fitness', task: 'program_generation' },
+        conversationHistory: [],
+        difficulty: userStore.difficulty || 'medium'
+      }
+    })
+
+    if (error) throw error
+
+    const match = data.message.match(/\{[\s\S]*\}/)
+    if (!match) throw new Error('AI did not return valid JSON')
+
+    const parsed = JSON.parse(match[0])
+    await createProgramFromTemplate({
+      name: parsed.name,
+      days: parsed.days.map(d => ({
+        ...d,
+        exercises: (d.exercises || []).map(e => ({
+          name: e.name,
+          sets: e.sets,
+          reps_min: e.reps_min,
+          reps_max: e.reps_max,
+          rest: e.rest_seconds
+        }))
+      }))
+    })
+  }
+
+  const exerciseNames = computed(() => exerciseLibrary.value.map(e => e.name))
+
   return {
     activeProgram,
     todaysWorkout,
@@ -465,6 +738,10 @@ export const useFitnessStore = defineStore('fitness', () => {
     workoutStreak,
     loading,
     previousWeekVolume,
+    exerciseLibrary,
+    exerciseNames,
+    archivedPrograms,
+    personalRecords,
     weeklyWorkoutCount,
     lastCompletedWorkout,
     volumeTrend,
@@ -477,6 +754,20 @@ export const useFitnessStore = defineStore('fitness', () => {
     deactivateProgram,
     fetchSetsForLog,
     fetchLastSessionSets,
-    fetchExerciseHistory
+    fetchExerciseHistory,
+    fetchExerciseLibrary,
+    searchExercises,
+    fetchLastWeightForExercise,
+    fetchPersonalRecords,
+    fetchWeeklyMuscleVolume,
+    archiveProgram,
+    reactivateProgram,
+    fetchArchivedPrograms,
+    updateProgramDay,
+    addExerciseToDay,
+    removeExerciseFromDay,
+    reorderExercises,
+    updateExercise,
+    createProgramFromAI
   }
 })

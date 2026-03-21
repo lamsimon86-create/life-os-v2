@@ -26,7 +26,7 @@
       <div
         v-for="day in sortedDays"
         :key="day.id"
-        class="flex items-center gap-2 text-sm rounded-lg px-3 py-2 transition-colors cursor-default"
+        class="flex items-center gap-2 text-sm rounded-lg px-3 py-2 transition-colors cursor-pointer"
         :class="[
           day.day_of_week === todayDow && !shuffleMode
             ? 'bg-brand-600/20 border border-brand-500/40 text-brand-300'
@@ -36,7 +36,7 @@
                 ? 'text-slate-300 hover:bg-slate-800 cursor-pointer'
                 : 'text-slate-400',
         ]"
-        @click="shuffleMode ? handleSwapClick(day) : null"
+        @click="shuffleMode ? handleSwapClick(day) : openDayEditor(day)"
       >
         <span class="w-10 font-medium shrink-0">{{ dayLabel(day.day_of_week) }}</span>
         <span v-if="day.is_rest_day" class="italic text-slate-500">Rest</span>
@@ -48,6 +48,12 @@
           v-if="day.day_of_week === todayDow && !shuffleMode"
           class="ml-auto text-xs text-brand-400 font-medium"
         >Today</span>
+        <div v-if="!shuffleMode" class="ml-auto flex items-center gap-1 shrink-0">
+          <span v-if="!day.is_rest_day && day.exercises?.length" class="text-[10px] text-slate-500">
+            {{ day.exercises.length }} exercises
+          </span>
+          <ChevronRight class="w-3 h-3 text-slate-500" />
+        </div>
         <ArrowUpDown
           v-if="shuffleMode && !day.is_rest_day"
           class="ml-auto w-3.5 h-3.5 text-slate-500"
@@ -59,7 +65,8 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { ArrowUpDown } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
+import { ArrowUpDown, ChevronRight } from 'lucide-vue-next'
 import { getDayOfWeek } from '@/lib/constants'
 import { useFitnessStore } from '@/stores/fitness'
 import { useToast } from '@/composables/useToast'
@@ -68,8 +75,15 @@ const props = defineProps({
   program: { type: Object, required: true }
 })
 
+const router = useRouter()
 const fitnessStore = useFitnessStore()
 const toast = useToast()
+
+function openDayEditor(day) {
+  if (!shuffleMode.value) {
+    router.push(`/fitness/edit/${day.id}`)
+  }
+}
 
 const todayDow = getDayOfWeek()
 const shuffleMode = ref(false)

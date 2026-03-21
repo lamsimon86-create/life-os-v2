@@ -183,7 +183,11 @@
 
       <!-- ===== HISTORY TAB ===== -->
       <template v-if="activeTab === 'history'">
-        <HistoryChart :logs="fitnessStore.recentLogs" />
+        <div class="space-y-4">
+          <HistoryChart />
+          <PersonalRecords />
+          <VolumeChart />
+        </div>
       </template>
 
     </template>
@@ -204,6 +208,8 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import ProgramCard from '@/components/fitness/ProgramCard.vue'
 import HistoryChart from '@/components/fitness/HistoryChart.vue'
 import AIBuilder from '@/components/fitness/AIBuilder.vue'
+import PersonalRecords from '@/components/fitness/PersonalRecords.vue'
+import VolumeChart from '@/components/fitness/VolumeChart.vue'
 
 const fitnessStore = useFitnessStore()
 const aiStore = useAiStore()

@@ -45,18 +45,19 @@
           :exercise="exercise"
           :logged-sets="getSetsForExercise(exercise.exercise_name)"
           :previous-sets="getPreviousSetsForExercise(exercise.exercise_name)"
-          :user-weight="userStore.profile?.weight_kg || null"
-          :experience="userStore.preferences?.fitness_experience || 'beginner'"
+          :current-p-r-s="currentPRs"
           @log-set="handleLogSet($event, exercise)"
+          @start-rest="startRestTimer"
+          @swap="handleExerciseSwap"
         />
       </div>
 
       <!-- Rest timer -->
       <RestTimer
-        v-if="showRestTimer"
         :seconds="currentRestSeconds"
         :active="showRestTimer"
         @dismiss="showRestTimer = false"
+        @adjust="(s) => currentRestSeconds = s"
       />
 
       <!-- Finish button -->
@@ -105,6 +106,7 @@ const loggedSets = ref([])
 const previousSets = ref([])
 const showRestTimer = ref(false)
 const currentRestSeconds = ref(90)
+const currentPRs = ref({})
 
 // Elapsed timer
 const elapsedSeconds = ref(0)
@@ -142,20 +144,29 @@ async function handleLogSet(setData, exercise) {
     set_number: setData.set_number,
     weight: setData.weight,
     reps: setData.reps,
-    is_warmup: setData.is_warmup || false
+    is_warmup: setData.is_warmup || false,
+    rpe: setData.rpe || null,
+    substituted_for: setData.substituted_for || null
   }
 
   try {
     await fitnessStore.logSet(fullSetData)
     loggedSets.value.push(fullSetData)
 
-    // Show rest timer
-    currentRestSeconds.value = exercise.rest_seconds || 90
-    showRestTimer.value = true
+    // Rest timer triggered by ExerciseCard via @start-rest
   } catch (err) {
     console.error('Failed to log set:', err)
     toast.show('Failed to log set', 'error')
   }
+}
+
+function startRestTimer(seconds) {
+  currentRestSeconds.value = seconds
+  showRestTimer.value = true
+}
+
+function handleExerciseSwap({ original, substitute }) {
+  // ExerciseCard handles swap display and weight prefill internally
 }
 
 async function handleFinish() {
@@ -241,6 +252,14 @@ onMounted(async () => {
       const lastSets = await fitnessStore.fetchLastSessionSets(logData.program_day_id)
       previousSets.value = lastSets
     }
+
+    // Fetch PRs for PR detection during workout
+    await fitnessStore.fetchPersonalRecords()
+    const prMap = {}
+    for (const pr of fitnessStore.personalRecords) {
+      prMap[pr.exercise_name] = pr.weight
+    }
+    currentPRs.value = prMap
 
     // Start the elapsed timer
     startElapsedTimer(logData.started_at)

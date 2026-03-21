@@ -223,9 +223,11 @@ export const useGoalsStore = defineStore('goals', () => {
 
 Goal (their words): "${userText}"
 Category: ${category}
-Current stats: Weight ${userStore.profile?.weight || 'unknown'}kg, Age ${userStore.profile?.age || 'unknown'}, Difficulty: ${userStore.difficulty || 'medium'}
+Current stats: Weight ${userStore.profile?.weight_kg || 'unknown'} lbs, Age ${userStore.profile?.age || 'unknown'}, Difficulty: ${userStore.difficulty || 'medium'}
 Fitness experience: ${userStore.preferences?.fitness_experience || 'unknown'}
 Current program: ${fitnessStore.activeProgram?.name || 'none'}
+
+IMPORTANT: Use lbs (not kg) for all weight-related metrics.
 
 Respond with JSON only:
 {

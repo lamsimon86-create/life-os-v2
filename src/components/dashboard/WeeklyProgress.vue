@@ -1,90 +1,80 @@
 <template>
-  <div class="bg-slate-800 rounded-xl p-3">
+  <div class="bg-slate-800 rounded-xl p-3.5">
     <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-3">This Week</div>
 
-    <div class="flex flex-col gap-3">
-      <!-- Workouts Ring -->
-      <div class="flex items-center gap-2">
-        <div class="relative w-9 h-9 shrink-0">
-          <svg width="36" height="36" viewBox="0 0 36 36">
-            <circle cx="18" cy="18" r="15" fill="none" stroke="#334155" stroke-width="3" />
+    <!-- Rings Row -->
+    <div class="grid grid-cols-3 gap-2">
+      <!-- Workouts -->
+      <div class="flex flex-col items-center text-center">
+        <div class="relative w-12 h-12 mb-1.5">
+          <svg width="48" height="48" viewBox="0 0 48 48">
+            <circle cx="24" cy="24" r="20" fill="none" stroke="#334155" stroke-width="3" />
             <circle
-              cx="18" cy="18" r="15" fill="none"
+              cx="24" cy="24" r="20" fill="none"
               stroke="#22c55e" stroke-width="3"
-              :stroke-dasharray="`${workoutDash} ${circumference}`"
+              :stroke-dasharray="`${workoutDash} ${ringCircumference}`"
               stroke-linecap="round"
-              transform="rotate(-90 18 18)"
+              transform="rotate(-90 24 24)"
             />
           </svg>
-          <div class="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-green-400">
+          <div class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-green-400">
             {{ wc.completed }}/{{ wc.planned }}
           </div>
         </div>
-        <div>
-          <div class="text-xs font-semibold">Workouts</div>
-          <div class="text-[10px] text-slate-500">{{ wc.planned - wc.completed }} remaining</div>
-        </div>
+        <div class="text-[11px] font-semibold">Workouts</div>
+        <div class="text-[10px] text-slate-500">{{ wc.planned - wc.completed }} left</div>
       </div>
 
-      <!-- Meals Ring -->
-      <div class="flex items-center gap-2">
-        <div class="relative w-9 h-9 shrink-0">
-          <svg width="36" height="36" viewBox="0 0 36 36">
-            <circle cx="18" cy="18" r="15" fill="none" stroke="#334155" stroke-width="3" />
+      <!-- Meals -->
+      <div class="flex flex-col items-center text-center">
+        <div class="relative w-12 h-12 mb-1.5">
+          <svg width="48" height="48" viewBox="0 0 48 48">
+            <circle cx="24" cy="24" r="20" fill="none" stroke="#334155" stroke-width="3" />
             <circle
-              cx="18" cy="18" r="15" fill="none"
+              cx="24" cy="24" r="20" fill="none"
               stroke="#3b82f6" stroke-width="3"
-              :stroke-dasharray="`${mealDash} ${circumference}`"
+              :stroke-dasharray="`${mealDash} ${ringCircumference}`"
               stroke-linecap="round"
-              transform="rotate(-90 18 18)"
+              transform="rotate(-90 24 24)"
             />
           </svg>
-          <div class="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-blue-400">
+          <div class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-blue-400">
             {{ mp.percentage }}%
           </div>
         </div>
-        <div>
-          <div class="text-xs font-semibold">Meals</div>
-          <div class="text-[10px] text-slate-500">{{ mp.logged }}/{{ mp.planned }} logged</div>
-        </div>
+        <div class="text-[11px] font-semibold">Meals</div>
+        <div class="text-[10px] text-slate-500">{{ mp.logged }}/{{ mp.planned }} logged</div>
       </div>
 
-      <!-- Goals Ring -->
-      <div class="flex items-center gap-2">
-        <div class="relative w-9 h-9 shrink-0">
-          <svg width="36" height="36" viewBox="0 0 36 36">
-            <circle cx="18" cy="18" r="15" fill="none" stroke="#334155" stroke-width="3" />
+      <!-- Goals -->
+      <div class="flex flex-col items-center text-center">
+        <div class="relative w-12 h-12 mb-1.5">
+          <svg width="48" height="48" viewBox="0 0 48 48">
+            <circle cx="24" cy="24" r="20" fill="none" stroke="#334155" stroke-width="3" />
             <circle
-              cx="18" cy="18" r="15" fill="none"
+              cx="24" cy="24" r="20" fill="none"
               stroke="#a78bfa" stroke-width="3"
-              :stroke-dasharray="`${goalDash} ${circumference}`"
+              :stroke-dasharray="`${goalDash} ${ringCircumference}`"
               stroke-linecap="round"
-              transform="rotate(-90 18 18)"
+              transform="rotate(-90 24 24)"
             />
           </svg>
-          <div class="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-purple-400">
+          <div class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-purple-400">
             {{ goalProgress }}%
           </div>
         </div>
-        <div>
-          <div class="text-xs font-semibold">Goals</div>
-          <div class="text-[10px] text-slate-500">{{ activeGoalCount }} active</div>
-        </div>
+        <div class="text-[11px] font-semibold">Goals</div>
+        <div class="text-[10px] text-slate-500">{{ activeGoalCount }} active</div>
       </div>
     </div>
 
-    <!-- Water Weekly -->
-    <div class="flex items-center gap-2 mt-1 pt-2 border-t border-slate-700">
-      <Droplets class="w-4 h-4 text-sky-400 shrink-0" />
-      <div>
-        <div class="text-xs font-semibold">Water</div>
-        <div class="text-[10px] text-slate-500">{{ userStore.weeklyWater }}/{{ weeklyWaterGoal }} glasses</div>
+    <!-- Footer: Water + Last Workout -->
+    <div class="mt-3 pt-2.5 border-t border-slate-700 flex items-center justify-between">
+      <div class="flex items-center gap-1.5">
+        <Droplets class="w-3.5 h-3.5 text-sky-400 shrink-0" />
+        <span class="text-[11px] text-slate-400">{{ userStore.weeklyWater }}/{{ weeklyWaterGoal }} glasses</span>
       </div>
-    </div>
-
-    <!-- Last Workout -->
-    <div v-if="lastWorkout" class="mt-3 pt-2 border-t border-slate-700">
-      <div class="text-[10px] text-slate-500">
+      <div v-if="lastWorkout" class="text-[10px] text-slate-500 text-right">
         Last: {{ lastWorkout.name }}, {{ lastWorkout.duration }}min, +{{ lastWorkout.xp }} XP
       </div>
     </div>
@@ -111,7 +101,7 @@ const mealsStore = useMealsStore()
 const goalsStore = useGoalsStore()
 const userStore = useUserStore()
 
-const circumference = 2 * Math.PI * 15 // ~94.2
+const ringCircumference = 2 * Math.PI * 20 // ~125.7
 
 const wc = computed(() => fitnessStore.weeklyWorkoutCount)
 const mp = computed(() => mealsStore.weeklyMealProgress)
@@ -128,12 +118,12 @@ const goalProgress = computed(() => {
 
 const workoutDash = computed(() => {
   if (wc.value.planned === 0) return 0
-  return (wc.value.completed / wc.value.planned) * circumference
+  return (wc.value.completed / wc.value.planned) * ringCircumference
 })
 
-const mealDash = computed(() => (mp.value.percentage / 100) * circumference)
+const mealDash = computed(() => (mp.value.percentage / 100) * ringCircumference)
 
-const goalDash = computed(() => (goalProgress.value / 100) * circumference)
+const goalDash = computed(() => (goalProgress.value / 100) * ringCircumference)
 
 const weeklyWaterGoal = computed(() => {
   const now = new Date()

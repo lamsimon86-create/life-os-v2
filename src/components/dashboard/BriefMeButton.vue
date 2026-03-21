@@ -32,10 +32,11 @@
         </div>
         <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Daily Briefing</div>
         <button
-          @click="dismiss"
+          @click="briefMe"
           class="ml-auto text-slate-500 hover:text-slate-300 transition-colors"
+          title="Refresh briefing"
         >
-          <X class="w-3.5 h-3.5" />
+          <RefreshCw class="w-3.5 h-3.5" />
         </button>
       </div>
       <p class="text-sm text-slate-300 leading-relaxed">{{ briefing }}</p>
@@ -52,8 +53,8 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { Sparkles, ChevronRight, X } from 'lucide-vue-next'
+import { ref, onMounted } from 'vue'
+import { Sparkles, ChevronRight, X, RefreshCw } from 'lucide-vue-next'
 import { supabase } from '@/lib/supabase'
 import { useAiStore } from '@/stores/ai'
 import { useFitnessStore } from '@/stores/fitness'
@@ -61,6 +62,8 @@ import { useMealsStore } from '@/stores/meals'
 import { useGoalsStore } from '@/stores/goals'
 import { useCalendarStore } from '@/stores/calendar'
 import { useUserStore } from '@/stores/user'
+
+const STORAGE_KEY = 'lifeos-daily-briefing'
 
 const fitnessStore = useFitnessStore()
 const mealsStore = useMealsStore()
@@ -73,9 +76,38 @@ const briefing = ref(null)
 const loading = ref(false)
 const error = ref(null)
 
+function todayKey() {
+  return new Date().toISOString().split('T')[0]
+}
+
+function loadCached() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const cached = JSON.parse(raw)
+    if (cached.date === todayKey()) return cached.message
+    localStorage.removeItem(STORAGE_KEY)
+  } catch { /* ignore corrupt data */ }
+  return null
+}
+
+function saveBriefing(message) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ date: todayKey(), message }))
+}
+
+function clearBriefing() {
+  localStorage.removeItem(STORAGE_KEY)
+}
+
+onMounted(() => {
+  const cached = loadCached()
+  if (cached) briefing.value = cached
+})
+
 function dismiss() {
   briefing.value = null
   error.value = null
+  clearBriefing()
 }
 
 async function briefMe() {
@@ -142,6 +174,7 @@ async function briefMe() {
     if (fnError) throw fnError
 
     briefing.value = data.message
+    saveBriefing(data.message)
   } catch (err) {
     error.value = 'Couldn\'t load briefing. Tap to retry.'
   } finally {

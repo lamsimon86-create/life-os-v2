@@ -29,7 +29,7 @@
             />
           </div>
           <div class="space-y-1">
-            <label class="text-sm font-medium text-slate-400">Weight (kg)</label>
+            <label class="text-sm font-medium text-slate-400">Weight (lbs)</label>
             <input
               v-model.number="form.weight_kg"
               type="number"

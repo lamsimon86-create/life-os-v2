@@ -29,6 +29,11 @@ const routes = [
     component: () => import('@/views/WorkoutView.vue')
   },
   {
+    path: '/fitness/edit/:dayId',
+    name: 'editProgramDay',
+    component: () => import('@/views/DayEditorView.vue')
+  },
+  {
     path: '/meals',
     name: 'meals',
     component: () => import('@/views/MealsView.vue')

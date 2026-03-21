@@ -31,14 +31,7 @@
           <div class="space-y-5">
             <!-- AI Program Builder (primary) -->
             <div class="rounded-xl bg-brand-600/10 border border-brand-600/30 p-5">
-              <h3 class="text-lg font-bold text-white mb-1">Build My Program</h3>
-              <p class="text-sm text-slate-400 mb-4">AI builds a program tailored to your goals, experience, and schedule.</p>
-              <button
-                class="w-full py-3 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-500 active:scale-[0.98] transition-all"
-                @click="aiStore.openWithMessage('Build me a workout program based on my profile')"
-              >
-                Build My Program
-              </button>
+              <AIBuilder @program-created="fitnessStore.hydrate()" />
             </div>
 
             <!-- Quick Start Templates (fallback) -->
@@ -210,6 +203,7 @@ import { PROGRAM_TEMPLATES } from '@/lib/program-templates'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import ProgramCard from '@/components/fitness/ProgramCard.vue'
 import HistoryChart from '@/components/fitness/HistoryChart.vue'
+import AIBuilder from '@/components/fitness/AIBuilder.vue'
 
 const fitnessStore = useFitnessStore()
 const aiStore = useAiStore()

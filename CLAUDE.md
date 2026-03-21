@@ -11,7 +11,7 @@ Personal life operating system — fitness, nutrition, goals, gamification.
 
 ## Key Conventions
 - **Composition API only** — no Options API
-- **Pinia stores** hydrate on app mount (auth → user → others in App.vue)
+- **Pinia stores** — auth.init() runs in main.js before app mount; other stores hydrate in App.vue onMounted (user → fitness → meals → goals)
 - **Database tables** use `v2_` prefix, all have RLS policies scoped to `auth.uid() = user_id`
 - **Migrations** use `gen_random_uuid()` (not `uuid_generate_v4()`)
 - **Routing** in `src/router/index.js` — auth guard + onboarding guard on all protected routes

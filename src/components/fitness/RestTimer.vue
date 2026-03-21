@@ -1,35 +1,20 @@
 <template>
-  <div
-    v-if="visible"
-    class="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4"
-  >
-    <div class="flex items-center gap-3 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 shadow-lg max-w-xs w-full">
-      <Timer :size="18" class="text-brand-400 shrink-0" />
-
-      <div class="flex-1">
-        <p class="text-xs text-slate-400">Rest Timer</p>
-        <p
-          class="text-lg font-bold tabular-nums"
-          :class="remaining <= 0 ? 'text-green-400' : 'text-white'"
-        >
-          {{ display }}
-        </p>
-      </div>
-
-      <button
-        v-if="remaining <= 0"
-        class="px-3 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-medium hover:bg-brand-500 active:scale-95 transition-all"
-        @click="restart"
-      >
-        Restart
+  <div v-if="active" class="mt-2 px-3 py-2 bg-slate-900 rounded-lg flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <Timer class="w-3.5 h-3.5 text-slate-500" />
+      <span class="text-base font-bold" :class="remaining <= 0 ? 'text-green-400' : 'text-green-500'">
+        {{ display }}
+      </span>
+    </div>
+    <div class="flex gap-1.5">
+      <button @click="adjust(-30)" class="bg-slate-700 text-slate-400 px-2 py-1 rounded-md text-[10px] hover:bg-slate-600">
+        -30s
       </button>
-
-      <button
-        class="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
-        aria-label="Dismiss timer"
-        @click="dismiss"
-      >
-        <X :size="16" />
+      <button @click="adjust(30)" class="bg-slate-700 text-slate-400 px-2 py-1 rounded-md text-[10px] hover:bg-slate-600">
+        +30s
+      </button>
+      <button @click="dismiss" class="bg-slate-700 text-slate-400 px-1.5 py-1 rounded-md text-[10px] hover:bg-slate-600">
+        <X class="w-3 h-3" />
       </button>
     </div>
   </div>
@@ -40,20 +25,13 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { Timer, X } from 'lucide-vue-next'
 
 const props = defineProps({
-  seconds: {
-    type: Number,
-    default: 90
-  },
-  active: {
-    type: Boolean,
-    default: true
-  }
+  seconds: { type: Number, default: 90 },
+  active: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['dismiss'])
+const emit = defineEmits(['dismiss', 'adjust'])
 
 const remaining = ref(props.seconds)
-const visible = ref(true)
 let intervalId = null
 
 const display = computed(() => {
@@ -77,27 +55,25 @@ function startTimer() {
 
 function onTimerDone() {
   clearInterval(intervalId)
-  // Vibrate if supported
   if (navigator.vibrate) {
     navigator.vibrate(200)
   }
 }
 
-function restart() {
-  remaining.value = props.seconds
-  startTimer()
+function adjust(delta) {
+  const newDuration = Math.max(0, remaining.value + delta)
+  remaining.value = newDuration
+  emit('adjust', newDuration)
 }
 
 function dismiss() {
   clearInterval(intervalId)
-  visible.value = false
   emit('dismiss')
 }
 
 watch(() => props.active, (val) => {
   if (val) {
     remaining.value = props.seconds
-    visible.value = true
     startTimer()
   } else {
     clearInterval(intervalId)

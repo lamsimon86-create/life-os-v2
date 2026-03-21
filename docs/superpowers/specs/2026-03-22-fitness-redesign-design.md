@@ -29,7 +29,7 @@ A "Swap" button appears in the exercise card header, next to the set counter bad
 5. Tapping an exercise replaces the card content
 6. The swapped card shows: new exercise name, "Swapped for {original}" subtitle in blue, blue left border, and an "Undo" button
 7. Sets/reps/rest carry over from the original exercise
-8. Weight pre-fills from user's last session with the substitute exercise (via `fetchLastSessionSets` logic, queried by exercise name)
+8. Weight pre-fills from user's last session with the substitute exercise via a new `fetchLastWeightForExercise(exerciseName)` action — queries the most recent non-warmup set for that exercise name from `v2_workout_sets` ordered by `created_at DESC`, limit 1
 9. Undo reverts to the original exercise (only available before logging any sets)
 
 **Data model:** The swap is session-only — it does NOT modify the program. The substitute exercise name is logged in `v2_workout_sets.exercise_name` (already the case). A new `substituted_for` column records the original exercise name for analytics context.
@@ -135,7 +135,7 @@ Available days: ${selectedDays.join(', ')}
 Goal: ${goal}
 Experience: ${experience}
 Injuries/limitations: ${injuries || 'none'}
-Current weight: ${userStore.profile?.weight_kg || 'unknown'} lbs
+Current weight: ${userStore.profile?.weight_kg || 'unknown'} lbs (note: the DB column is named weight_kg but stores lbs)
 
 Respond with JSON only:
 {
@@ -164,7 +164,9 @@ Rules:
 
 **Fallback:** If the AI call fails, show an error toast and offer the 3 hardcoded templates as a backup. Templates are moved from FitnessView inline code to a constants file (`src/lib/program-templates.js`).
 
-**Store changes:** Add `createProgramFromAI(days, goal, experience, injuries)` action to `fitnessStore`. This calls the AI, parses the response, and calls the existing `createProgramFromTemplate()` with the parsed data (same DB write path).
+**Data flow:** `AIBuilder.vue` collects form data → calls `fitnessStore.createProgramFromAI()` → store calls `supabase.functions.invoke('ai-assistant', { body: { message: prompt, context: { page: 'fitness', task: 'program_generation' }, conversationHistory: [] } })` directly (NOT through aiStore — this is a headless AI call like `estimateMacros` in mealsStore) → parses JSON from response using `data.message.match(/\{[\s\S]*\}/)` → feeds parsed program into existing `createProgramFromTemplate()` DB write path.
+
+**Store changes:** Add `createProgramFromAI(days, goal, experience, injuries)` action to `fitnessStore`. This calls the AI Edge Function directly, parses the structured JSON response, and calls the existing `createProgramFromTemplate()` with the parsed data (same DB write path). No changes needed to the Edge Function — it already returns text that can contain JSON.
 
 ### Program History
 
@@ -217,8 +219,8 @@ A list of the user's heaviest lift per exercise, showing:
 Horizontal bar chart showing total sets per muscle group for the current week.
 
 **Data flow:**
-1. Fetch this week's `v2_workout_sets` (Monday to today)
-2. Join exercise names with `v2_exercise_library.muscle_group`
+1. Fetch this week's `v2_workout_sets` (Monday to today) from Supabase
+2. Client-side: match each set's `exercise_name` against the cached `exerciseLibrary` array to get `muscle_group` (no server-side join — exercise names are plain text, not FK)
 3. Count sets per muscle group
 4. Render as horizontal progress bars, each bar relative to the highest group
 
@@ -241,19 +243,8 @@ Current streak counts consecutive days with a logged workout. This breaks on pro
 2. When calculating streak, skip rest days in the sequence
 3. Streak breaks only when a scheduled training day has no completed workout
 
-### Exercise Library Seed
-Seed `v2_exercise_library` with ~50 common exercises covering all muscle groups and equipment types. This table already exists but is empty.
-
-Categories to cover:
-- **Chest:** Bench Press, Incline Bench, Dumbbell Bench, Dumbbell Flyes, Cable Flyes, Incline Dumbbell Press, Chest Dips
-- **Back:** Barbell Row, Dumbbell Row, Pull-ups, Lat Pulldown, Seated Cable Row, T-Bar Row, Face Pulls
-- **Shoulders:** Overhead Press, Lateral Raises, Front Raises, Rear Delt Flyes, Arnold Press, Upright Row
-- **Legs:** Squat, Leg Press, Romanian Deadlift, Leg Curl, Leg Extension, Calf Raises, Bulgarian Split Squat, Hip Thrust
-- **Arms:** Barbell Curl, Dumbbell Curl, Hammer Curl, Tricep Pushdown, Skull Crushers, Overhead Tricep Extension, Preacher Curl
-- **Core:** Planks, Cable Crunches, Hanging Leg Raises, Ab Wheel, Russian Twists
-- **Compound:** Deadlift, Clean and Press, Farmer's Walk
-
-Each entry: `name`, `muscle_group`, `equipment` (barbell/dumbbell/cable/machine/bodyweight), `is_compound` (boolean).
+### Exercise Library Expansion
+The exercise library already has ~40 exercises from `002_v2_seed.sql`. This migration adds ~11 more to fill gaps (Incline Dumbbell Press, Cable Flyes, Chest Dips, T-Bar Row, Dumbbell Shoulder Press, Front Squat, Goblet Squat, Cable Curl, Tricep Dips, Clean and Press, Farmer's Walk). All use lowercase muscle groups to match existing convention.
 
 ### Weight Ratios
 Remove the hardcoded `WEIGHT_RATIOS` object from ExerciseCard. Instead, when pre-filling weight for a new exercise (no previous session data), leave the weight field empty. The user inputs their starting weight manually. Previous session data is the primary pre-fill mechanism and already works.
@@ -262,7 +253,11 @@ Remove the hardcoded `WEIGHT_RATIOS` object from ExerciseCard. Instead, when pre
 
 ## Database Changes
 
-### Migration: `007_fitness_redesign.sql`
+### Migration
+
+Use `npx supabase migration new fitness_redesign` (auto-generates timestamp filename).
+
+**Note:** The exercise library already has ~40 exercises from `002_v2_seed.sql` using **lowercase** muscle groups (e.g., `'chest'`, `'back'`). This migration adds only exercises not already seeded. All muscle groups use lowercase to match existing convention. ExerciseSearch filter chips display title-case labels but query with case-insensitive matching.
 
 ```sql
 -- RPE tracking on sets
@@ -272,63 +267,25 @@ ALTER TABLE v2_workout_sets ADD COLUMN substituted_for text;
 -- Program archival
 ALTER TABLE v2_fitness_programs ADD COLUMN archived_at timestamptz;
 
--- Seed exercise library (~50 exercises)
+-- Add exercises not in existing seed (002_v2_seed.sql already has ~40)
 INSERT INTO v2_exercise_library (name, muscle_group, equipment, is_compound) VALUES
-  -- Chest
-  ('Bench Press', 'Chest', 'barbell', true),
-  ('Incline Bench Press', 'Chest', 'barbell', true),
-  ('Dumbbell Bench Press', 'Chest', 'dumbbell', true),
-  ('Incline Dumbbell Press', 'Chest', 'dumbbell', true),
-  ('Dumbbell Flyes', 'Chest', 'dumbbell', false),
-  ('Cable Flyes', 'Chest', 'cable', false),
-  ('Chest Dips', 'Chest', 'bodyweight', true),
-  -- Back
-  ('Barbell Row', 'Back', 'barbell', true),
-  ('Dumbbell Row', 'Back', 'dumbbell', true),
-  ('Pull-ups', 'Back', 'bodyweight', true),
-  ('Lat Pulldown', 'Back', 'cable', true),
-  ('Seated Cable Row', 'Back', 'cable', true),
-  ('T-Bar Row', 'Back', 'barbell', true),
-  ('Face Pulls', 'Back', 'cable', false),
-  -- Shoulders
-  ('Overhead Press', 'Shoulders', 'barbell', true),
-  ('Dumbbell Shoulder Press', 'Shoulders', 'dumbbell', true),
-  ('Lateral Raises', 'Shoulders', 'dumbbell', false),
-  ('Front Raises', 'Shoulders', 'dumbbell', false),
-  ('Rear Delt Flyes', 'Shoulders', 'dumbbell', false),
-  ('Arnold Press', 'Shoulders', 'dumbbell', true),
-  ('Upright Row', 'Shoulders', 'barbell', false),
-  -- Legs
-  ('Squat', 'Legs', 'barbell', true),
-  ('Front Squat', 'Legs', 'barbell', true),
-  ('Leg Press', 'Legs', 'machine', true),
-  ('Romanian Deadlift', 'Legs', 'barbell', true),
-  ('Leg Curl', 'Legs', 'machine', false),
-  ('Leg Extension', 'Legs', 'machine', false),
-  ('Calf Raises', 'Legs', 'machine', false),
-  ('Bulgarian Split Squat', 'Legs', 'dumbbell', true),
-  ('Hip Thrust', 'Legs', 'barbell', true),
-  ('Goblet Squat', 'Legs', 'dumbbell', true),
-  -- Arms
-  ('Barbell Curl', 'Arms', 'barbell', false),
-  ('Dumbbell Curl', 'Arms', 'dumbbell', false),
-  ('Hammer Curl', 'Arms', 'dumbbell', false),
-  ('Preacher Curl', 'Arms', 'barbell', false),
-  ('Tricep Pushdown', 'Arms', 'cable', false),
-  ('Skull Crushers', 'Arms', 'barbell', false),
-  ('Overhead Tricep Extension', 'Arms', 'dumbbell', false),
-  ('Cable Curl', 'Arms', 'cable', false),
-  ('Tricep Dips', 'Arms', 'bodyweight', true),
-  -- Core
-  ('Planks', 'Core', 'bodyweight', false),
-  ('Cable Crunches', 'Core', 'cable', false),
-  ('Hanging Leg Raises', 'Core', 'bodyweight', false),
-  ('Ab Wheel', 'Core', 'bodyweight', false),
-  ('Russian Twists', 'Core', 'bodyweight', false),
-  -- Compound / Full Body
-  ('Deadlift', 'Back', 'barbell', true),
-  ('Clean and Press', 'Shoulders', 'barbell', true),
-  ('Farmer''s Walk', 'Core', 'dumbbell', true)
+  -- Chest (new: Incline Dumbbell Press, Cable Flyes, Chest Dips)
+  ('Incline Dumbbell Press', 'chest', 'dumbbell', true),
+  ('Cable Flyes', 'chest', 'cable', false),
+  ('Chest Dips', 'chest', 'bodyweight', true),
+  -- Back (new: T-Bar Row)
+  ('T-Bar Row', 'back', 'barbell', true),
+  -- Shoulders (new: Dumbbell Shoulder Press)
+  ('Dumbbell Shoulder Press', 'shoulders', 'dumbbell', true),
+  -- Legs (new: Front Squat, Goblet Squat)
+  ('Front Squat', 'legs', 'barbell', true),
+  ('Goblet Squat', 'legs', 'dumbbell', true),
+  -- Arms (new: Cable Curl, Tricep Dips)
+  ('Cable Curl', 'arms', 'cable', false),
+  ('Tricep Dips', 'arms', 'bodyweight', true),
+  -- Compound (new: Clean and Press, Farmer's Walk)
+  ('Clean and Press', 'shoulders', 'barbell', true),
+  ('Farmer''s Walk', 'core', 'dumbbell', true)
 ON CONFLICT (name) DO NOTHING;
 
 -- Index for exercise history queries
@@ -345,7 +302,7 @@ CREATE INDEX IF NOT EXISTS idx_workout_sets_exercise_history
 | Component | Responsibility |
 |-----------|---------------|
 | `src/components/fitness/ExerciseSearch.vue` | Reusable exercise library search with muscle group filters |
-| `src/components/fitness/DayEditor.vue` | Program day editor with drag-to-reorder exercises |
+| `src/views/DayEditorView.vue` | Program day editor view (route: `/fitness/edit/:dayId`) |
 | `src/components/fitness/AIBuilder.vue` | Multi-step AI program generation form |
 | `src/components/fitness/PersonalRecords.vue` | PR list display |
 | `src/components/fitness/VolumeChart.vue` | Weekly muscle group volume bars |
@@ -358,7 +315,7 @@ CREATE INDEX IF NOT EXISTS idx_workout_sets_exercise_history
 | `ProgramCard.vue` | Make days tappable with exercise count + chevron, navigate to DayEditor |
 | `FitnessView.vue` | Replace hardcoded templates with AIBuilder, add program history section, fix duplicate focus bug, redesign History tab with 3 sections |
 | `WorkoutView.vue` | Pass RPE to logSet, handle exercise swap state, handle skip state |
-| `HistoryChart.vue` | Redesign with dual-line chart (weight + est 1RM), stats row underneath |
+| `HistoryChart.vue` | Near-rewrite: dual-line chart (weight + est 1RM), stats row underneath. Becomes one of three sections in the History tab alongside PersonalRecords and VolumeChart. Props change from receiving `logs` array to fetching data via store actions internally. |
 
 ### Deleted
 None — all changes are modifications to existing components or new additions.
@@ -376,9 +333,10 @@ None — all changes are modifications to existing components or new additions.
 - `fetchExerciseLibrary()` — fetch all from `v2_exercise_library`, cache in state
 - `searchExercises(query, muscleGroup)` — client-side filter on cached `exerciseLibrary`
 - `fetchPersonalRecords()` — query max weight per exercise from `v2_workout_sets`
-- `fetchWeeklyVolume()` — query this week's sets joined with exercise library for muscle groups
+- `fetchLastWeightForExercise(exerciseName)` — query most recent non-warmup set for an exercise (for swap weight pre-fill)
+- `fetchWeeklyVolume()` — two-step query: fetch this week's sets from `v2_workout_sets`, then join client-side with cached `exerciseLibrary` by exercise name to get muscle groups (no server-side join needed since exercise names are plain text with no FK)
 - `createProgramFromAI(days, goal, experience, injuries)` — call AI, parse, create program
-- `archiveProgram(programId)` — set `archived_at = now()`, `is_active = false`
+- `archiveProgram(programId)` — set `archived_at = now()`, `is_active = false`. Replaces `deactivateProgram()` — all callers (including `changeProgram` in FitnessView) should use `archiveProgram` instead
 - `reactivateProgram(programId)` — deactivate current, reactivate selected
 - `fetchArchivedPrograms()` — query programs with `archived_at IS NOT NULL`
 - `updateProgramDay(dayId, { name, is_rest_day })` — update day metadata
@@ -411,7 +369,7 @@ Add route for program day editor:
 {
   path: '/fitness/edit/:dayId',
   name: 'EditProgramDay',
-  component: () => import('@/components/fitness/DayEditor.vue'),
+  component: () => import('@/views/DayEditorView.vue'),
   meta: { requiresAuth: true }
 }
 ```
